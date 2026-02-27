@@ -2,15 +2,13 @@ part of excel;
 
 class Save {
   final Excel _excel;
-  late Map<String, ArchiveFile> _archiveFiles;
-  late List<CellStyle> _innerCellStyle;
+  final Map<String, ArchiveFile> _archiveFiles = {};
+  final List<CellStyle> _innerCellStyle = [];
   final Parser parser;
   final String? creator;
   final String? description;
-  Save._(this._excel, this.parser, {this.creator, this.description}) {
-    _archiveFiles = <String, ArchiveFile>{};
-    _innerCellStyle = <CellStyle>[];
-  }
+  
+  Save._(this._excel, this.parser, {this.creator, this.description});
 
   void _addNewColumn(XmlElement columns, int min, int max, double width) {
     columns.children.add(XmlElement(XmlName('col'), [
@@ -50,11 +48,11 @@ class Save {
       CellValue? value, NumFormat? numberFormat) {
     SharedString? sharedString;
     if (value is TextCellValue) {
-      sharedString = _excel._sharedStrings.tryFind(value.value);
+      sharedString = _excel._sharedStrings.tryFind(value.toString());
       if (sharedString != null) {
-        _excel._sharedStrings.add(sharedString, value.value);
+        _excel._sharedStrings.add(sharedString, value.toString());
       } else {
-        sharedString = _excel._sharedStrings.addFromString(value.value);
+        sharedString = _excel._sharedStrings.addFromString(value.toString());
       }
     }
 
@@ -63,6 +61,7 @@ class Save {
     var attributes = <XmlAttribute>[
       XmlAttribute(XmlName('r'), rC),
       if (value is TextCellValue) XmlAttribute(XmlName('t'), 's'),
+      if (value is BoolCellValue) XmlAttribute(XmlName('t'), 'b'),
     ];
 
     final cellStyle =
@@ -153,7 +152,9 @@ class Save {
           ]),
         ];
       case BoolCellValue():
-        children = [];
+        children = [
+          XmlElement(XmlName('v'), [], [XmlText(value.value ? '1' : '0')]),
+        ];
     }
 
     return XmlElement(XmlName('c'), attributes, children);
@@ -175,7 +176,7 @@ class Save {
   /// Writing Font Color in [xl/styles.xml] from the Cells of the sheets.
 
   void _processStylesFile() {
-    _innerCellStyle = <CellStyle>[];
+    _innerCellStyle.clear();
     List<String> innerPatternFill = <String>[];
     List<_FontStyle> innerFontStyle = <_FontStyle>[];
     List<_BorderSet> innerBorderSet = <_BorderSet>[];

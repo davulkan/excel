@@ -63,6 +63,10 @@ void main() {
       excel.tables['Tabelle1']?.rows[10][1]?.value,
       equals(DoubleCellValue(0.05)),
     );
+    expect(
+      excel.tables['Tabelle1']?.rows[11][1]?.value,
+      equals(TimeCellValue(hour: 2, minute: 20, second: 10)),
+    );
   });
 
   test('Cell Data-Types from Google Spreadsheet', () {
@@ -87,8 +91,16 @@ void main() {
     );
     expect(
       excel.tables['Sheet1']?.rows[6][1]?.value,
-      equals(DateTimeCellValue(
-          year: 2023, month: 4, day: 20, hour: 15, minute: 44, second: 13)),
+      equals(
+        DateTimeCellValue(
+          year: 2023,
+          month: 4,
+          day: 20,
+          hour: 15,
+          minute: 44,
+          second: 13,
+        ),
+      ),
     );
     expect(
       excel.tables['Sheet1']?.rows[7][1]?.value,
@@ -131,7 +143,13 @@ void main() {
     expect(
       excel.tables['Sheet1']?.rows[6][1]?.value,
       equals(DateTimeCellValue(
-          year: 2023, month: 4, day: 20, hour: 15, minute: 44, second: 13)),
+        year: 2023,
+        month: 4,
+        day: 20,
+        hour: 15,
+        minute: 44,
+        second: 13,
+      )),
     );
     expect(
       excel.tables['Sheet1']?.rows[7][1]?.value,
@@ -265,6 +283,7 @@ void main() {
     expect(b1_2.cellStyle?.numberFormat, equals(format2));
     expect(b1_2.value, equals(DoubleCellValue(123456.789)));
   });
+  
   group('Sheet Operations', () {
     var file = './test/test_resources/example.xlsx';
     var bytes = File(file).readAsBytesSync();
@@ -350,6 +369,82 @@ void main() {
     expect(newExcel.tables['Sheet1']!.maxColumns, equals(3));
     expect(newExcel.tables['Sheet1']!.rows[4][1]!.value.toString(),
         equals('Moscow'));
+  });
+
+  test('Saving XLSX File with appendRow', () {
+    var excel = Excel.createExcel();
+    var sheet = excel['Sheet1'];
+
+    sheet.appendRow([
+      IntCellValue(8),
+      DoubleCellValue(999.62221),
+      DateCellValue(year: 2023, month: 4, day: 20),
+      DateTimeCellValue(
+        year: 2023,
+        month: 4,
+        day: 20,
+        hour: 15,
+        minute: 44,
+        second: 13,
+      ),
+      TextCellValue('value'),
+    ]);
+
+    //stopwatch.reset();
+    List<int>? fileBytes = excel.save();
+    //print('saving executed in ${stopwatch.elapsed}');
+    if (fileBytes != null) {
+      File(Directory.current.path + '/tmp/exampleOut.xlsx')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(fileBytes);
+    }
+
+    var newFile = './tmp/exampleOut.xlsx';
+    var newFileBytes = File(newFile).readAsBytesSync();
+    var newExcel = Excel.decodeBytes(newFileBytes);
+
+    // delete tmp folder
+    new Directory('./tmp').delete(recursive: true);
+    expect(newExcel.sheets.entries.length, equals(1));
+    expect(newExcel.tables['Sheet1']!.maxColumns, equals(5));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][0]!.value, equals(IntCellValue(8)));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][0]!.cellStyle?.numberFormat
+            .toString(),
+        equals(NumFormat.defaultNumeric.toString()));
+    expect(newExcel.tables['Sheet1']!.rows[0][1]!.value,
+        DoubleCellValue(999.62221));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][1]!.cellStyle?.numberFormat
+            .toString(),
+        equals(NumFormat.defaultFloat.toString()));
+    expect(newExcel.tables['Sheet1']!.rows[0][2]!.value,
+        DateCellValue(year: 2023, month: 4, day: 20));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][2]!.cellStyle?.numberFormat
+            .toString(),
+        equals(NumFormat.defaultDate.toString()));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][3]!.value,
+        DateTimeCellValue(
+          year: 2023,
+          month: 4,
+          day: 20,
+          hour: 15,
+          minute: 44,
+          second: 13,
+        ));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][3]!.cellStyle?.numberFormat
+            .toString(),
+        equals(NumFormat.defaultDateTime.toString()));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][4]!.value, TextCellValue('value'));
+    expect(
+        newExcel.tables['Sheet1']!.rows[0][4]!.cellStyle?.numberFormat
+            .toString(),
+        equals(NumFormat.standard_0.toString()));
   });
 
   test('Saving XLSX File with superscript', () {
@@ -468,7 +563,7 @@ void main() {
       var file = './test/test_resources/example.xlsx';
       var bytes = File(file).readAsBytesSync();
       var excel = Excel.decodeBytes(bytes);
-      Sheet? sheetObject = excel.tables['Sheet1']!;
+      Sheet sheetObject = excel.tables['Sheet1']!;
 
       sheetObject.headerFooter!.oddHeader = "Foo";
       sheetObject.headerFooter!.oddFooter = "Bar";
@@ -733,6 +828,36 @@ void main() {
     });
   });
 
+  group('Cell Style', () {
+    test('read file with rich text', () {
+      final file = './test/test_resources/richText.xlsx';
+      final bytes = File(file).readAsBytesSync();
+      final excel = Excel.decodeBytes(bytes);
+      final Sheet sheetObject = excel.tables['Sheet1']!;
+      final redHex = 'FFFF0000';
+      final blueHex = 'FF2A6099';
+
+      final cellA1 = sheetObject.cell(CellIndex.indexByString('A1')).value
+          as TextCellValue;
+      expect(cellA1.value.children![0].style!.fontSize, 12);
+      expect(cellA1.value.children![0].style!.fontColor.colorHex, redHex);
+      expect(cellA1.value.children![1].style!.fontSize, 10);
+      expect(cellA1.value.children![1].style!.fontColor.colorHex, blueHex);
+
+      final cellA2 = sheetObject.cell(CellIndex.indexByString('A2')).value
+          as TextCellValue;
+      expect(cellA2.value.children![0].style!.isBold, true);
+      expect(cellA2.value.children![0].style!.isItalic, false);
+      expect(cellA2.value.children![1].style!.isBold, false);
+      expect(cellA2.value.children![1].style!.isItalic, true);
+
+      final cellA3 = sheetObject.cell(CellIndex.indexByString('A3')).value
+          as TextCellValue;
+      expect(cellA3.value.children![0].style!.fontFamily, "Skia");
+      expect(cellA3.value.children![1].style!.fontFamily, "Arial");
+    });
+  });
+
   group('rPh tag', () {
     test('Read Cell shared text without rPh elements', () {
       var file = './test/test_resources/rphSample.xlsx';
@@ -881,5 +1006,98 @@ void main() {
         }
       });
     });
+  });
+
+  group('Spanned Items', () {
+    test("read spanned items", () {
+      var file = './test/test_resources/spannedItemExample.xlsx';
+      var bytes = File(file).readAsBytesSync();
+      var excel = Excel.decodeBytes(bytes);
+
+      Sheet? sheet = excel.tables["Spanned Items"]!;
+
+      testSpannedItemsSheetValues(Sheet sheet) {
+        final cells =
+            sheet.rows.expand((r) => r.where((c) => c != null)).toList();
+
+        expect(cells[0]?.value, equals(TextCellValue('spanned item A1:B1')));
+        expect(cells[0]?.cellIndex,
+            equals(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)));
+
+        expect(cells[1]?.value, equals(TextCellValue('spanned item A2:A3')));
+        expect(cells[1]?.cellIndex,
+            equals(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)));
+
+        expect(cells[2]?.value, equals(TextCellValue('spanned item A4:B5')));
+        expect(cells[2]?.cellIndex,
+            equals(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3)));
+      }
+
+      testSpannedItemsList(Sheet sheet) {
+        List<String> spannedItems = sheet.spannedItems;
+
+        expect(spannedItems[0], equals('A1:B1'));
+        expect(spannedItems[1], equals('A2:A3'));
+        expect(spannedItems[2], equals('A4:B5'));
+      }
+
+      testSpannedItemsList(sheet);
+
+      testSpannedItemsSheetValues(sheet);
+
+      var fileBytes = excel.encode();
+      if (fileBytes != null) {
+        File(Directory.current.path + '/tmp/spannedItemExampleOut.xlsx')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(fileBytes);
+      }
+      var newFile = './tmp/spannedItemExampleOut.xlsx';
+      var newFileBytes = File(newFile).readAsBytesSync();
+      var newExcel = Excel.decodeBytes(newFileBytes);
+      // delete tmp folder
+      new Directory('./tmp').delete(recursive: true);
+
+      Sheet? newSheet = newExcel.tables["Spanned Items"]!;
+
+      testSpannedItemsList(newSheet);
+
+      testSpannedItemsSheetValues(newSheet);
+    });
+  });
+
+  test('Parse column width row height', () {
+    var file = './test/test_resources/columnWidthRowHeight.xlsx';
+    var bytes = File(file).readAsBytesSync();
+    var excel = Excel.decodeBytes(bytes);
+    Sheet? sheetObject = excel.tables['Sheet1']!;
+
+    // should 20 with a litle bit of tolerance.
+    expect(sheetObject.defaultColumnWidth, greaterThan(18));
+    expect(sheetObject.defaultColumnWidth, lessThan(22));
+
+    // should 20 with a litle bit of tolerance.
+    expect(sheetObject.defaultRowHeight, greaterThan(18));
+    expect(sheetObject.defaultRowHeight, lessThan(22));
+
+    // should 40 with a litle bit of tolerance.
+    expect(sheetObject.getColumnWidth(1), greaterThan(38));
+    expect(sheetObject.getColumnWidth(1), lessThan(42));
+
+    // should 40 with a litle bit of tolerance.
+    expect(sheetObject.getRowHeight(1), greaterThan(38));
+    expect(sheetObject.getRowHeight(1), lessThan(42));
+  });
+
+  test('Decode customNumFmtIdBelow164.xlsx without throwing exception', () {
+    var file = './test/test_resources/customNumFmtIdBelow164.xlsx';
+
+    expect(
+      () {
+        final bytes = File(file).readAsBytesSync();
+        final _ = Excel.decodeBytes(bytes);
+      },
+      returnsNormally,
+      reason: 'Decoding the file should not throw any exception',
+    );
   });
 }
