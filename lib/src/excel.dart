@@ -309,11 +309,11 @@ class Excel {
     return s._save();
   }
 
-  /// Creates full xlsx archive in memory and then starts encoding its bytes to [out]
-  void encodeToStream(OutputStream out,
+  /// Creates full xlsx archive in memory and then starts encoding its bytes to OutputFileStream created from [targetFilePath]
+  void encodeToFileStream(String targetFilePath,
       {String? creator, String? description}) {
     Save s = Save._(this, parser, creator: creator, description: description);
-    s._saveToStream(out);
+    s._saveToStream(OutputFileStream(targetFilePath));
   }
 
   /// Starts Saving the file.
