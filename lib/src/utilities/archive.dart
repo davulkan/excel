@@ -19,9 +19,11 @@ Archive _cloneArchive(
         copy = _archiveFiles[file.name]!;
       } else {
         var content = file.content as Uint8List;
-        var compress = !_noCompression.contains(file.name);
+        var compression = _noCompression.contains(file.name)
+            ? CompressionType.none
+            : CompressionType.deflate;
         copy = ArchiveFile(file.name, content.length, content)
-          ..compress = compress;
+          ..compression = compression;
       }
       clone.addFile(copy);
     }

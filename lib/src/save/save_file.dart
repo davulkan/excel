@@ -77,10 +77,8 @@ class Save {
   /// Returns -1 if no style should be applied.
   int _computeStyleIndex(
       String sheetName, int columnIndex, int rowIndex, CellValue? value) {
-    CellStyle? cellStyle = _excel._sheetMap[sheetName]
-        ?._sheetData[rowIndex]
-        ?[columnIndex]
-        ?.cellStyle;
+    CellStyle? cellStyle = _excel
+        ._sheetMap[sheetName]?._sheetData[rowIndex]?[columnIndex]?.cellStyle;
 
     // When styles are being tracked, synthesize a minimal CellStyle for cells
     // without explicit style but with values that need a specific numFormat.
@@ -119,7 +117,8 @@ class Save {
     final CellValue? value = data.value;
 
     String rC = getCellId(columnIndex, rowIndex);
-    int styleIndex = _computeStyleIndex(sheetName, columnIndex, rowIndex, value);
+    int styleIndex =
+        _computeStyleIndex(sheetName, columnIndex, rowIndex, value);
 
     // Handle null values: write an empty <c> element if there's a style, otherwise skip
     if (value == null) {
@@ -269,8 +268,7 @@ class Save {
   }
 
   /// Writes the full <sheetData>...</sheetData> block to the StringBuffer.
-  void _buildSheetDataXml(
-      StringBuffer buf, Sheet sheet, String sheetName) {
+  void _buildSheetDataXml(StringBuffer buf, Sheet sheet, String sheetName) {
     buf.write('<sheetData>');
 
     final customHeights = sheet.getRowHeights;
@@ -1166,9 +1164,7 @@ class Save {
 
       // Track this sheet file for streaming serialization
       final String? xmlFileKey = _excel._xmlSheetId[sheetName];
-      if (xmlFileKey != null) {
-        _streamingSheetFiles.add(xmlFileKey);
-      }
+      if (xmlFileKey != null) _streamingSheetFiles.add(xmlFileKey);
 
       _setHeaderFooter(sheetName);
     });

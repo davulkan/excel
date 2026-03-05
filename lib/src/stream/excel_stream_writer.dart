@@ -65,11 +65,11 @@ class ExcelStreamWriter {
     final sheetNames = _sheets.map((s) => s.name).toList();
 
     // Write small scaffolding files to temp dir
-    _writeTempFile('Content_Types.xml',
-        StreamXmlTemplates.contentTypes(sheetNames));
+    _writeTempFile(
+        'Content_Types.xml', StreamXmlTemplates.contentTypes(sheetNames));
     _writeTempFile('rels.xml', StreamXmlTemplates.topLevelRels());
-    _writeTempFile('workbook_rels.xml',
-        StreamXmlTemplates.workbookRels(sheetNames));
+    _writeTempFile(
+        'workbook_rels.xml', StreamXmlTemplates.workbookRels(sheetNames));
     _writeTempFile('workbook.xml', StreamXmlTemplates.workbook(sheetNames));
     _writeTempFile('styles.xml', _styles.buildStylesXmlBytes());
     _writeTempFile('sharedStrings.xml', _sharedStrings.buildXmlBytes());
@@ -93,7 +93,6 @@ class ExcelStreamWriter {
       final fileStream = InputFileStream(tempPath);
       final archiveFile = ArchiveFile.stream(
         'xl/worksheets/sheet${i + 1}.xml',
-        File(tempPath).lengthSync(),
         fileStream,
       );
       encoder.addArchiveFile(archiveFile);
@@ -144,7 +143,6 @@ class ExcelStreamWriter {
     final fileStream = InputFileStream(tempPath);
     final archiveFile = ArchiveFile.stream(
       archiveName,
-      File(tempPath).lengthSync(),
       fileStream,
     );
     encoder.addArchiveFile(archiveFile);
