@@ -2,7 +2,6 @@ part of excel;
 
 class Save {
   final Excel _excel;
-  final Map<String, ArchiveFile> _archiveFiles = {};
   final List<CellStyle> _innerCellStyle = [];
   final Parser parser;
   final String? creator;
@@ -613,6 +612,7 @@ class Save {
     if (_excel._rtlChanges) _setRTL();
     if (creator != null && description != null) _addCoreProps();
 
+    final Map<String, ArchiveFile> _archiveFiles = {};
     for (var xmlFile in _excel._xmlFiles.keys) {
       var xml = _excel._xmlFiles[xmlFile].toString();
       var content = utf8.encode(xml);
@@ -636,6 +636,7 @@ class Save {
     if (_excel._rtlChanges) _setRTL();
     if (creator != null && description != null) _addCoreProps();
 
+    final Map<String, ArchiveFile> _archiveFiles = {};
     for (var xmlFile in _excel._xmlFiles.keys) {
       var xml = _excel._xmlFiles[xmlFile].toString();
       var content = utf8.encode(xml);
@@ -1077,7 +1078,7 @@ class Save {
   } */
   XmlElement _updateCell(String sheet, XmlElement row, int columnIndex,
       int rowIndex, CellValue? value, NumFormat? numberFormat) {
-    var cell = _createCell(sheet, columnIndex, rowIndex, value, numberFormat);
+    final cell = _createCell(sheet, columnIndex, rowIndex, value, numberFormat);
     row.children.add(cell);
     return cell;
   }

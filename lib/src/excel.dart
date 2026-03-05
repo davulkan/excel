@@ -305,15 +305,17 @@ class Excel {
   ///It will start setting the edited values of `sheets` into the `files` and then `exports the file`.
   ///
   List<int>? encode({String? creator, String? description}) {
-    Save s = Save._(this, parser, creator: creator, description: description);
+    final s = Save._(this, parser, creator: creator, description: description);
     return s._save();
   }
 
   /// Creates full xlsx archive in memory and then starts encoding its bytes to OutputFileStream created from [targetFilePath]
   void encodeToFileStream(String targetFilePath,
       {String? creator, String? description}) {
-    Save s = Save._(this, parser, creator: creator, description: description);
-    s._saveToStream(OutputFileStream(targetFilePath));
+    final s = Save._(this, parser, creator: creator, description: description);
+    final stream = OutputFileStream(targetFilePath);
+    s._saveToStream(stream);
+    stream.close();
   }
 
   /// Starts Saving the file.
