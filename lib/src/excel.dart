@@ -27,6 +27,8 @@ class Excel {
   bool _mergeChanges = false;
   bool _rtlChanges = false;
 
+  /// Initial xlsx file archive, if this object was created by Excel.decode...
+  /// If this Excel object is created from ground up, [_archive] field will be empty
   Archive _archive;
 
   final Map<String, XmlNode> _sheets = {};

@@ -6,9 +6,8 @@ Archive _cloneArchive(
   String? excludedFile,
 }) {
   var clone = Archive();
-  archive.files.forEach(
+  archive.files.where((f) => f.isFile).forEach(
     (file) {
-      if (!file.isFile) return;
       if (excludedFile != null &&
           file.name.toLowerCase() == excludedFile.toLowerCase()) {
         return;

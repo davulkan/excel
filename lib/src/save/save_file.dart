@@ -603,32 +603,31 @@ class Save {
 
   List<int>? _save() {
     if (_excel._styleChanges) _processStylesFile();
-
     _setSheetElements();
     if (_excel._defaultSheet != null) _setDefaultSheet(_excel._defaultSheet);
-
     _setSharedStrings();
     if (_excel._mergeChanges) _setMerge();
     if (_excel._rtlChanges) _setRTL();
     if (creator != null && description != null) _addCoreProps();
 
-    final Map<String, ArchiveFile> _archiveFiles = {};
-    for (var xmlFile in _excel._xmlFiles.keys) {
-      var xml = _excel._xmlFiles[xmlFile].toString();
-      var content = utf8.encode(xml);
-      if (xmlFile == 'docProps/core.xml') {
+    final _archiveFiles = <String, ArchiveFile>{};
+    for (final fName in _excel._xmlFiles.keys) {
+      final xmlContent = _excel._xmlFiles[fName].toString();
+      final content = utf8.encode(xmlContent);
+      if (fName == 'docProps/core.xml') {
         _excel._archive
             .addFile(ArchiveFile('docProps/core.xml', content.length, content));
       }
-      _archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.length, content);
+      _archiveFiles[fName] = ArchiveFile(fName, content.length, content);
     }
     return ZipEncoder().encode(_cloneArchive(_excel._archive, _archiveFiles));
   }
 
+  // "Memory_usage_optimized" version of _save method
   void _saveToStream(OutputStream out) {
     if (_excel._styleChanges) _processStylesFile();
 
-    _setSheetElements();
+    _setSheetElements(); // slowest part of saving process
     if (_excel._defaultSheet != null) _setDefaultSheet(_excel._defaultSheet);
 
     _setSharedStrings();
@@ -636,21 +635,31 @@ class Save {
     if (_excel._rtlChanges) _setRTL();
     if (creator != null && description != null) _addCoreProps();
 
-    final Map<String, ArchiveFile> _archiveFiles = {};
-    for (var xmlFile in _excel._xmlFiles.keys) {
-      var xml = _excel._xmlFiles[xmlFile].toString();
-      var content = utf8.encode(xml);
-      if (xmlFile == 'docProps/core.xml') {
+    final zipper = ZipEncoder();
+    zipper.startEncode(out);
+    for (final fName in _excel._xmlFiles.keys) {
+      final xmlContent = _excel._xmlFiles[fName].toString();
+      final bytes = utf8.encode(xmlContent);
+      if (fName == 'docProps/core.xml') {
         _excel._archive
-            .addFile(ArchiveFile('docProps/core.xml', content.length, content));
+            .addFile(ArchiveFile('docProps/core.xml', bytes.length, bytes));
       }
-      _archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.length, content);
+
+      zipper.add(ArchiveFile(fName, bytes.length, bytes), autoClose: false);
     }
 
-    ZipEncoder().encodeStream(
-      _cloneArchive(_excel._archive, _archiveFiles),
-      out,
+    final freshXmlFileNames = _excel._xmlFiles.keys;
+    _excel._archive.files
+        .where((oldFile) => !freshXmlFileNames.contains(oldFile.name))
+        .forEach(
+      (oldFile) {
+        final comprMode = _noCompression.contains(oldFile.name)
+            ? CompressionType.none
+            : CompressionType.deflate;
+        zipper.add(oldFile..compression = comprMode, autoClose: false);
+      },
     );
+    zipper.endEncode(comment: _excel._archive.comment);
   }
 
   void _setColumns(Sheet sheetObject, XmlDocument xmlFile) {
