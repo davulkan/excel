@@ -1,17 +1,8 @@
 import 'dart:io';
 import 'package:excel/excel_streaming.dart';
 
-/// Measures RSS memory of the current process via /proc/self/status on Linux.
-int getRssKb() {
-  final lines = File('/proc/self/status').readAsLinesSync();
-  for (final line in lines) {
-    if (line.startsWith('VmRSS:')) {
-      final parts = line.split(RegExp(r'\s+'));
-      return int.parse(parts[1]);
-    }
-  }
-  return -1;
-}
+/// Measures RSS memory of the current process
+int getRssKb() => ProcessInfo.currentRss ~/ 1024;
 
 String formatMb(int kb) => '${(kb / 1024).toStringAsFixed(1)} MB';
 
@@ -41,8 +32,8 @@ void main(List<String> args) {
   final streamSheet = writer.addSheet('Data');
 
   // Header
-  streamSheet.appendRow(
-      List.generate(colCount, (i) => TextCellValue('Column_$i')));
+  streamSheet
+      .appendRow(List.generate(colCount, (i) => TextCellValue('Column_$i')));
 
   // Data rows
   for (var r = 0; r < rowCount; r++) {

@@ -1,17 +1,8 @@
 import 'dart:io';
 import 'package:excel/excel.dart';
 
-/// Measures RSS memory of the current process via /proc/self/status on Linux.
-int getRssKb() {
-  final lines = File('/proc/self/status').readAsLinesSync();
-  for (final line in lines) {
-    if (line.startsWith('VmRSS:')) {
-      final parts = line.split(RegExp(r'\s+'));
-      return int.parse(parts[1]); // in kB
-    }
-  }
-  return -1;
-}
+/// Measures RSS memory of the current process
+int getRssKb() => ProcessInfo.currentRss ~/ 1024;
 
 String formatMb(int kb) => '${(kb / 1024).toStringAsFixed(1)} MB';
 

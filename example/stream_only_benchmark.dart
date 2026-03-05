@@ -1,16 +1,8 @@
 import 'dart:io';
 import 'package:excel/excel_streaming.dart';
 
-int getRssKb() {
-  final lines = File('/proc/self/status').readAsLinesSync();
-  for (final line in lines) {
-    if (line.startsWith('VmRSS:')) {
-      final parts = line.split(RegExp(r'\s+'));
-      return int.parse(parts[1]);
-    }
-  }
-  return -1;
-}
+/// Measures RSS memory of the current process
+int getRssKb() => ProcessInfo.currentRss ~/ 1024;
 
 String formatMb(int kb) => '${(kb / 1024).toStringAsFixed(1)} MB';
 
@@ -33,8 +25,7 @@ void main(List<String> args) {
   final writer = ExcelStreamWriter();
   final sheet = writer.addSheet('Data');
 
-  sheet.appendRow(
-      List.generate(colCount, (i) => TextCellValue('Column_$i')));
+  sheet.appendRow(List.generate(colCount, (i) => TextCellValue('Column_$i')));
 
   int peakFillRss = rssStart;
   for (var r = 0; r < rowCount; r++) {
@@ -80,14 +71,17 @@ void main(List<String> args) {
   print('============================================');
   print('  Summary');
   print('============================================');
-  print('Cells:          ${rowCount * colCount} (${(rowCount * colCount / 1000000).toStringAsFixed(0)}M)');
+  print(
+      'Cells:          ${rowCount * colCount} (${(rowCount * colCount / 1000000).toStringAsFixed(0)}M)');
   print('Fill time:      ${(fillTime / 1000).toStringAsFixed(1)}s');
   print('Encode time:    ${(encodeTime / 1000).toStringAsFixed(1)}s');
-  print('Total time:     ${((fillTime + encodeTime) / 1000).toStringAsFixed(1)}s');
+  print(
+      'Total time:     ${((fillTime + encodeTime) / 1000).toStringAsFixed(1)}s');
   print('Peak fill RSS:  ${formatMb(peakFillRss)}');
   print('Peak encode RSS:${formatMb(rssEncode)}');
   print('File size:      ${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB');
-  print('RAM/file ratio: ${(rssEncode / 1024 / (fileSize / 1024 / 1024)).toStringAsFixed(1)}x');
+  print(
+      'RAM/file ratio: ${(rssEncode / 1024 / (fileSize / 1024 / 1024)).toStringAsFixed(1)}x');
 
   File('stream_200m_output.xlsx').deleteSync();
 }
