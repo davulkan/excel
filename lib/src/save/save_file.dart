@@ -7,6 +7,14 @@ class Save {
   final Parser parser;
   final String? creator;
   final String? description;
+
+  /// HashMap caches for O(1) style lookups instead of O(n) indexOf calls.
+  final Map<CellStyle, int> _innerStyleCache = {};
+  final Map<CellStyle, int> _upperStyleCache = {};
+
+  /// Tracks which XML file keys use streaming serialization (sheet files).
+  final Set<String> _streamingSheetFiles = {};
+
   Save._(this._excel, this.parser, {this.creator, this.description}) {
     _archiveFiles = <String, ArchiveFile>{};
     _innerCellStyle = <CellStyle>[];
@@ -35,158 +43,340 @@ class Save {
     return ((maxNumOfCharacters * 7.0 + 9.0) / 7.0 * 256).truncate() / 256;
   }
 
-  /*   XmlElement _replaceCell(String sheet, XmlElement row, XmlElement lastCell,
-      int columnIndex, int rowIndex, CellValue? value) {
-    var index = lastCell == null ? 0 : row.children.indexOf(lastCell);
-    var cell = _createCell(sheet, columnIndex, rowIndex, value);
-    row.children
-      ..removeAt(index)
-      ..insert(index, cell);
-    return cell;
-  } */
+  // ---------------------------------------------------------------------------
+  // Streaming XML helpers
+  // ---------------------------------------------------------------------------
 
-  // Manage value's type
-  XmlElement _createCell(String sheet, int columnIndex, int rowIndex,
-      CellValue? value, NumFormat? numberFormat) {
-    SharedString? sharedString;
-    if (value is TextCellValue) {
-      sharedString = _excel._sharedStrings.tryFind(value.value);
-      if (sharedString != null) {
-        _excel._sharedStrings.add(sharedString, value.value);
-      } else {
-        sharedString = _excel._sharedStrings.addFromString(value.value);
+  /// Escapes text content for XML: &, <, >
+  String _escapeXmlText(String text) => _escapeXml(text);
+
+  /// Registers a shared string for a TextCellValue and returns its index.
+  /// Does NOT build XmlElement DOM — uses the existing SharedStrings API.
+  int _registerSharedString(TextCellValue val) {
+    SharedString? sharedString = _excel._sharedStrings.tryFind(val.value);
+    if (sharedString != null) {
+      _excel._sharedStrings.add(sharedString, val.value);
+    } else {
+      sharedString = _excel._sharedStrings.addFromString(val.value);
+    }
+    return _excel._sharedStrings.indexOf(sharedString);
+  }
+
+  /// Pre-registers all shared strings for a sheet without building DOM.
+  void _registerSharedStringsForSheet(Sheet sheet) {
+    sheet._sheetData.forEach((_, columnMap) {
+      columnMap.forEach((_, data) {
+        if (data.value is TextCellValue) {
+          _registerSharedString(data.value as TextCellValue);
+        }
+      });
+    });
+  }
+
+  /// Computes the style index (the 's' attribute value) for a cell.
+  /// Returns -1 if no style should be applied.
+  int _computeStyleIndex(
+      String sheetName, int columnIndex, int rowIndex, CellValue? value) {
+    CellStyle? cellStyle = _excel._sheetMap[sheetName]
+        ?._sheetData[rowIndex]
+        ?[columnIndex]
+        ?.cellStyle;
+
+    // When styles are being tracked, synthesize a minimal CellStyle for cells
+    // without explicit style but with values that need a specific numFormat.
+    if (_excel._styleChanges && cellStyle == null && value != null) {
+      final numFmt = NumFormat.defaultFor(value);
+      if (numFmt != NumFormat.standard_0) {
+        cellStyle = CellStyle(numberFormat: numFmt);
       }
     }
 
-    String rC = getCellId(columnIndex, rowIndex);
-
-    var attributes = <XmlAttribute>[
-      XmlAttribute(XmlName('r'), rC),
-      if (value is TextCellValue) XmlAttribute(XmlName('t'), 's'),
-    ];
-
-    final cellStyle =
-        _excel._sheetMap[sheet]?._sheetData[rowIndex]?[columnIndex]?.cellStyle;
-
     if (_excel._styleChanges && cellStyle != null) {
-      int upperLevelPos = _checkPosition(_excel._cellStyleList, cellStyle);
+      int upperLevelPos = _upperStyleCache[cellStyle] ?? -1;
       if (upperLevelPos == -1) {
-        int lowerLevelPos = _checkPosition(_innerCellStyle, cellStyle);
+        int lowerLevelPos = _innerStyleCache[cellStyle] ?? -1;
         if (lowerLevelPos != -1) {
           upperLevelPos = lowerLevelPos + _excel._cellStyleList.length;
         } else {
           upperLevelPos = 0;
         }
       }
-      attributes.insert(
-        1,
-        XmlAttribute(XmlName('s'), '$upperLevelPos'),
-      );
-    } else if (_excel._cellStyleReferenced.containsKey(sheet) &&
-        _excel._cellStyleReferenced[sheet]!.containsKey(rC)) {
-      attributes.insert(
-        1,
-        XmlAttribute(
-            XmlName('s'), '${_excel._cellStyleReferenced[sheet]![rC]}'),
-      );
+      return upperLevelPos;
     }
 
-    // TODO track & write the numFmts/numFmt to styles.xml if used
-    final List<XmlElement> children;
+    String rC = getCellId(columnIndex, rowIndex);
+    if (_excel._cellStyleReferenced.containsKey(sheetName) &&
+        _excel._cellStyleReferenced[sheetName]!.containsKey(rC)) {
+      return _excel._cellStyleReferenced[sheetName]![rC]!;
+    }
+
+    return -1;
+  }
+
+  /// Writes a single <c> element for a cell directly to the StringBuffer.
+  void _writeCellXml(StringBuffer buf, String sheetName, int columnIndex,
+      int rowIndex, Data data) {
+    final CellValue? value = data.value;
+
+    String rC = getCellId(columnIndex, rowIndex);
+    int styleIndex = _computeStyleIndex(sheetName, columnIndex, rowIndex, value);
+
+    // Handle null values: write an empty <c> element if there's a style, otherwise skip
+    if (value == null) {
+      if (styleIndex >= 0) {
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('" s="');
+        buf.write(styleIndex);
+        buf.write('"/>');
+      }
+      return;
+    }
+
+    final NumFormat numFormat =
+        data.cellStyle?.numberFormat ?? NumFormat.defaultFor(value);
+
     switch (value) {
-      case null:
-        children = [];
-      case FormulaCellValue():
-        children = [
-          XmlElement(XmlName('f'), [], [XmlText(value.formula)]),
-          XmlElement(XmlName('v'), [], [XmlText('')]),
-        ];
-      case IntCellValue():
-        final String v = switch (numberFormat) {
-          NumericNumFormat() => numberFormat.writeInt(value),
-          _ => throw Exception(
-              '$numberFormat does not work for ${value.runtimeType}'),
-        };
-        children = [
-          XmlElement(XmlName('v'), [], [XmlText(v)]),
-        ];
-      case DoubleCellValue():
-        final String v = switch (numberFormat) {
-          NumericNumFormat() => numberFormat.writeDouble(value),
-          _ => throw Exception(
-              '$numberFormat does not work for ${value.runtimeType}'),
-        };
-        children = [
-          XmlElement(XmlName('v'), [], [XmlText(v)]),
-        ];
-      case DateTimeCellValue():
-        final String v = switch (numberFormat) {
-          DateTimeNumFormat() => numberFormat.writeDateTime(value),
-          _ => throw Exception(
-              '$numberFormat does not work for ${value.runtimeType}'),
-        };
-        children = [
-          XmlElement(XmlName('v'), [], [XmlText(v)]),
-        ];
-      case DateCellValue():
-        final String v = switch (numberFormat) {
-          DateTimeNumFormat() => numberFormat.writeDate(value),
-          _ => throw Exception(
-              '$numberFormat does not work for ${value.runtimeType}'),
-        };
-        children = [
-          XmlElement(XmlName('v'), [], [XmlText(v)]),
-        ];
-      case TimeCellValue():
-        final String v = switch (numberFormat) {
-          TimeNumFormat() => numberFormat.writeTime(value),
-          _ => throw Exception(
-              '$numberFormat does not work for ${value.runtimeType}'),
-        };
-        children = [
-          XmlElement(XmlName('v'), [], [XmlText(v)]),
-        ];
       case TextCellValue():
-        children = [
-          XmlElement(XmlName('v'), [], [
-            XmlText(_excel._sharedStrings.indexOf(sharedString!).toString())
-          ]),
-        ];
+        int ssIndex = _excel._sharedStrings
+            .indexOf(_excel._sharedStrings.tryFind(value.value)!);
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('" t="s"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(ssIndex);
+        buf.write('</v></c>');
+
+      case FormulaCellValue():
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><f>');
+        buf.write(_escapeXmlText(value.formula));
+        buf.write('</f><v></v></c>');
+
+      case IntCellValue():
+        final String v = switch (numFormat) {
+          NumericNumFormat() => numFormat.writeInt(value),
+          _ => value.value.toString(),
+        };
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(v);
+        buf.write('</v></c>');
+
+      case DoubleCellValue():
+        final String v = switch (numFormat) {
+          NumericNumFormat() => numFormat.writeDouble(value),
+          _ => value.value.toString(),
+        };
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(v);
+        buf.write('</v></c>');
+
       case BoolCellValue():
-        children = [];
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('" t="b"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(value.value ? '1' : '0');
+        buf.write('</v></c>');
+
+      case DateTimeCellValue():
+        final String v = switch (numFormat) {
+          DateTimeNumFormat() => numFormat.writeDateTime(value),
+          _ => throw Exception(
+              '$numFormat does not work for ${value.runtimeType}'),
+        };
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(v);
+        buf.write('</v></c>');
+
+      case DateCellValue():
+        final String v = switch (numFormat) {
+          DateTimeNumFormat() => numFormat.writeDate(value),
+          _ => throw Exception(
+              '$numFormat does not work for ${value.runtimeType}'),
+        };
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(v);
+        buf.write('</v></c>');
+
+      case TimeCellValue():
+        final String v = switch (numFormat) {
+          TimeNumFormat() => numFormat.writeTime(value),
+          _ => throw Exception(
+              '$numFormat does not work for ${value.runtimeType}'),
+        };
+        buf.write('<c r="');
+        buf.write(rC);
+        buf.write('"');
+        if (styleIndex >= 0) {
+          buf.write(' s="');
+          buf.write(styleIndex);
+          buf.write('"');
+        }
+        buf.write('><v>');
+        buf.write(v);
+        buf.write('</v></c>');
+    }
+  }
+
+  /// Writes the full <sheetData>...</sheetData> block to the StringBuffer.
+  void _buildSheetDataXml(
+      StringBuffer buf, Sheet sheet, String sheetName) {
+    buf.write('<sheetData>');
+
+    final customHeights = sheet.getRowHeights;
+    final sortedRows = sheet._sheetData.keys.toList()..sort();
+
+    for (final rowIndex in sortedRows) {
+      final columnMap = sheet._sheetData[rowIndex];
+      if (columnMap == null || columnMap.isEmpty) continue;
+
+      double? height = customHeights[rowIndex];
+      int? level = sheet.getRowLevel(rowIndex);
+
+      buf.write('<row r="');
+      buf.write(rowIndex + 1);
+      buf.write('"');
+
+      if (height != null) {
+        buf.write(' ht="');
+        buf.write(height.toStringAsFixed(2));
+        buf.write('" customHeight="1"');
+      }
+
+      if (level != null) {
+        buf.write(' outlineLevel="');
+        buf.write(level);
+        buf.write('"');
+      }
+
+      buf.write('>');
+
+      final sortedCols = columnMap.keys.toList()..sort();
+      for (final columnIndex in sortedCols) {
+        final data = columnMap[columnIndex];
+        if (data == null) continue;
+        _writeCellXml(buf, sheetName, columnIndex, rowIndex, data);
+      }
+
+      buf.write('</row>');
     }
 
-    return XmlElement(XmlName('c'), attributes, children);
+    buf.write('</sheetData>');
   }
 
-  /// Create a new row in the sheet.
-  XmlElement _createNewRow(XmlElement table, int rowIndex, double? height, {int? level}) {
-    var row = XmlElement(XmlName('row'), [
-      XmlAttribute(XmlName('r'), (rowIndex + 1).toString()),
-      if (height != null)
-        XmlAttribute(XmlName('ht'), height.toStringAsFixed(2)),
-      if(level != null) XmlAttribute(XmlName('outlineLevel'), level.toString()),
-      if (height != null) XmlAttribute(XmlName('customHeight'), '1'),
-    ], []);
-    table.children.add(row);
-    return row;
+  /// Serializes a complete sheet XML using DOM for everything except sheetData,
+  /// which is streamed via StringBuffer for performance.
+  String _serializeSheetXml(String xmlFileKey, String sheetName) {
+    final XmlDocument xmlDoc = _excel._xmlFiles[xmlFileKey]!;
+
+    // Find sheetData element and clear its children (we'll replace with streamed content)
+    final sheetDataElement = xmlDoc.findAllElements('sheetData').first;
+    sheetDataElement.children.clear();
+
+    // Serialize the DOM to string — sheetData will be empty: <sheetData/> or <sheetData></sheetData>
+    String xmlString = xmlDoc.toString();
+
+    // Build the streamed sheetData content
+    final Sheet sheet = _excel._sheetMap[sheetName]!;
+    final StringBuffer sheetDataBuf = StringBuffer();
+    _buildSheetDataXml(sheetDataBuf, sheet, sheetName);
+    final String streamedSheetData = sheetDataBuf.toString();
+
+    // Replace the empty sheetData tag with streamed content
+    // Handle both self-closing and open/close forms
+    xmlString = xmlString.replaceFirst(
+        RegExp(r'<sheetData\s*/>|<sheetData>\s*</sheetData>'),
+        streamedSheetData);
+
+    return xmlString;
   }
+
+  // ---------------------------------------------------------------------------
+  // Style processing
+  // ---------------------------------------------------------------------------
 
   /// Writing Font Color in [xl/styles.xml] from the Cells of the sheets.
 
   void _processStylesFile() {
     _innerCellStyle = <CellStyle>[];
+    _innerStyleCache.clear();
+    _upperStyleCache.clear();
     List<String> innerPatternFill = <String>[];
     List<_FontStyle> innerFontStyle = <_FontStyle>[];
     List<_BorderSet> innerBorderSet = <_BorderSet>[];
 
+    // Build _upperStyleCache from existing _cellStyleList
+    for (int i = 0; i < _excel._cellStyleList.length; i++) {
+      _upperStyleCache[_excel._cellStyleList[i]] = i;
+    }
+
     _excel._sheetMap.forEach((sheetName, sheetObject) {
       sheetObject._sheetData.forEach((_, columnMap) {
         columnMap.forEach((_, dataObject) {
-          if (dataObject.cellStyle != null) {
-            int pos = _checkPosition(_innerCellStyle, dataObject.cellStyle!);
-            if (pos == -1) {
-              _innerCellStyle.add(dataObject.cellStyle!);
+          CellStyle? cs = dataObject.cellStyle;
+          // Synthesize style for cells with values that need a non-General numFormat
+          if (cs == null && dataObject.value != null) {
+            final numFmt = NumFormat.defaultFor(dataObject.value);
+            if (numFmt != NumFormat.standard_0) {
+              cs = CellStyle(numberFormat: numFmt);
+            }
+          }
+          if (cs != null) {
+            if (!_upperStyleCache.containsKey(cs) &&
+                !_innerStyleCache.containsKey(cs)) {
+              int idx = _innerCellStyle.length;
+              _innerCellStyle.add(cs);
+              _innerStyleCache[cs] = idx;
             }
           }
         });
@@ -506,7 +696,6 @@ class Save {
             .first
             .children
             .insert(0, numFmtsElement);
-        // styleSheet.children.insert(0, numFmtsElement);
       }
       count = int.parse(numFmtsElement.getAttribute('count') ?? '0');
 
@@ -621,8 +810,18 @@ class Save {
     if (creator != null && description != null) {
       _addCoreProps();
     }
+
     for (var xmlFile in _excel._xmlFiles.keys) {
-      var xml = _excel._xmlFiles[xmlFile].toString();
+      String xml;
+      if (_streamingSheetFiles.contains(xmlFile)) {
+        // Use streaming serialization for sheet files
+        final sheetName = _excel._xmlSheetId.entries
+            .firstWhere((e) => e.value == xmlFile)
+            .key;
+        xml = _serializeSheetXml(xmlFile, sheetName);
+      } else {
+        xml = _excel._xmlFiles[xmlFile].toString();
+      }
       var content = utf8.encode(xml);
       if (xmlFile == 'docProps/core.xml') {
         _excel._archive
@@ -630,7 +829,8 @@ class Save {
       }
       _archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.length, content);
     }
-    return ZipEncoder().encode(_cloneArchive(_excel._archive, _archiveFiles));
+    return ZipEncoder()
+        .encode(_buildOutputArchive(_excel._archive, _archiveFiles));
   }
 
   void _setColumns(Sheet sheetObject, XmlDocument xmlFile) {
@@ -688,34 +888,6 @@ class Save {
       columnWidths.add(width);
 
       _addNewColumn(columns, index, index, width);
-    }
-  }
-
-  void _setRows(String sheetName, Sheet sheetObject) {
-    final customHeights = sheetObject.getRowHeights;
-
-    for (var rowIndex = 0; rowIndex < sheetObject._maxRows; rowIndex++) {
-      double? height;
-
-      if (customHeights.containsKey(rowIndex)) {
-        height = customHeights[rowIndex];
-      }
-
-      if (sheetObject._sheetData[rowIndex] == null) {
-        continue;
-      }
-      var foundRow = _createNewRow(
-          _excel._sheets[sheetName]! as XmlElement, rowIndex, height, level: sheetObject.getRowLevel(rowIndex));
-      for (var columnIndex = 0;
-          columnIndex < sheetObject._maxColumns;
-          columnIndex++) {
-        var data = sheetObject._sheetData[rowIndex]![columnIndex];
-        if (data == null) {
-          continue;
-        }
-        _updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value,
-            data.cellStyle?.numberFormat);
-      }
     }
   }
 
@@ -846,44 +1018,6 @@ class Save {
     });
   }
 
-  // slow implementation
-  /*XmlElement _findRowByIndex(XmlElement table, int rowIndex) {
-    XmlElement row;
-    var rows = _findRows(table);
-
-    var currentIndex = 0;
-    for (var currentRow in rows) {
-      currentIndex = _getRowNumber(currentRow) - 1;
-      if (currentIndex >= rowIndex) {
-        row = currentRow;
-        break;
-      }
-    }
-
-    // Create row if required
-    if (row == null || currentIndex != rowIndex) {
-      row = __insertRow(table, row, rowIndex);
-    }
-
-    return row;
-  }
-
-  XmlElement _createRow(int rowIndex) {
-    return XmlElement(XmlName('row'),
-        [XmlAttribute(XmlName('r'), (rowIndex + 1).toString())], []);
-  }
-
-  XmlElement __insertRow(XmlElement table, XmlElement lastRow, int rowIndex) {
-    var row = _createRow(rowIndex);
-    if (lastRow == null) {
-      table.children.add(row);
-    } else {
-      var index = table.children.indexOf(lastRow);
-      table.children.insert(index, row);
-    }
-    return row;
-  }*/
-
   void _setRTL() {
     _excel._rtlChangeLook.forEach((s) {
       var sheetObject = _excel._sheetMap[s];
@@ -972,8 +1106,10 @@ class Save {
   }
 
   /// Writing cell contained text into the excel sheet files.
+  /// Uses streaming XML for sheet data instead of building DOM trees.
   void _setSheetElements() {
     _excel._sharedStrings.clear();
+    _streamingSheetFiles.clear();
 
     _excel._sheetMap.forEach((sheetName, sheetObject) {
       ///
@@ -982,14 +1118,11 @@ class Save {
         parser._createSheet(sheetName);
       }
 
-      /// Clear the previous contents of the sheet if it exists,
-      /// in order to reduce the time to find and compare with the sheet rows
-      /// and hence just do the work of putting the data only i.e. creating new rows
+      /// Clear the previous contents of the sheetData DOM element.
+      /// The actual data will be written via streaming in _serializeSheetXml.
       if (_excel._sheets[sheetName]?.children.isNotEmpty ?? false) {
         _excel._sheets[sheetName]!.children.clear();
       }
-
-      /// `Above function is important in order to wipe out the old contents of the sheet.`
 
       XmlDocument? xmlFile = _excel._xmlFiles[_excel._xmlSheetId[sheetName]];
       if (xmlFile == null) return;
@@ -1027,40 +1160,18 @@ class Save {
 
       _setColumns(sheetObject, xmlFile);
 
-      _setRows(sheetName, sheetObject);
+      // Register shared strings for this sheet (streaming approach —
+      // no DOM row/cell creation needed).
+      _registerSharedStringsForSheet(sheetObject);
+
+      // Track this sheet file for streaming serialization
+      final String? xmlFileKey = _excel._xmlSheetId[sheetName];
+      if (xmlFileKey != null) {
+        _streamingSheetFiles.add(xmlFileKey);
+      }
 
       _setHeaderFooter(sheetName);
     });
-  }
-
-  // slow implementation
-/*   XmlElement _updateCell(String sheet, XmlElement node, int columnIndex,
-      int rowIndex, CellValue? value) {
-    XmlElement cell;
-    var cells = _findCells(node);
-
-    var currentIndex = 0; // cells could be empty
-    for (var currentCell in cells) {
-      currentIndex = _getCellNumber(currentCell);
-      if (currentIndex >= columnIndex) {
-        cell = currentCell;
-        break;
-      }
-    }
-
-    if (cell == null || currentIndex != columnIndex) {
-      cell = _insertCell(sheet, node, cell, columnIndex, rowIndex, value);
-    } else {
-      cell = _replaceCell(sheet, node, cell, columnIndex, rowIndex, value);
-    }
-
-    return cell;
-  } */
-  XmlElement _updateCell(String sheet, XmlElement row, int columnIndex,
-      int rowIndex, CellValue? value, NumFormat? numberFormat) {
-    var cell = _createCell(sheet, columnIndex, rowIndex, value, numberFormat);
-    row.children.add(cell);
-    return cell;
   }
 
   _BorderSet _createBorderSetFromCellStyle(CellStyle cellStyle) => _BorderSet(

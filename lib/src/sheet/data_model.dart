@@ -1,11 +1,10 @@
 part of excel;
 
 // ignore: must_be_immutable
-class Data extends Equatable {
+class Data {
   CellStyle? _cellStyle;
   CellValue? _value;
   Sheet _sheet;
-  String _sheetName;
   int _rowIndex;
   int _columnIndex;
 
@@ -35,7 +34,6 @@ class Data extends Equatable {
   })  : _sheet = sheet,
         _value = value,
         _cellStyle = cellStyleVal,
-        _sheetName = sheet.sheetName,
         _rowIndex = row,
         _columnIndex = column;
 
@@ -56,7 +54,7 @@ class Data extends Equatable {
 
   /// returns the sheet-name
   String get sheetName {
-    return _sheetName;
+    return _sheet.sheetName;
   }
 
   /// returns the string based cellId as A1, A2 or Z5
@@ -94,17 +92,21 @@ class Data extends Equatable {
   /// sets the user defined CellStyle in this current cell
   set cellStyle(CellStyle? _) {
     _sheet._excel._styleChanges = true;
-    _cellStyle = _;
+    _cellStyle = _ != null ? Sheet._internStyle(_) : null;
   }
 
   @override
-  List<Object?> get props => [
-        _value,
-        _columnIndex,
-        _rowIndex,
-        _cellStyle,
-        _sheetName,
-      ];
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Data &&
+          _rowIndex == other._rowIndex &&
+          _columnIndex == other._columnIndex &&
+          _value == other._value &&
+          _cellStyle == other._cellStyle &&
+          identical(_sheet, other._sheet);
+
+  @override
+  int get hashCode => Object.hash(_rowIndex, _columnIndex, _value, _cellStyle);
 }
 
 sealed class CellValue {

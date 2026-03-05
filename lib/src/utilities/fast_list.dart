@@ -2,36 +2,29 @@ part of excel;
 
 // A helper class to optimized the usage of Maps
 class FastList<K> {
-  Map<K, int> _map = <K, int>{};
-  int _index = 0;
+  Set<K> _index = <K>{};
 
   FastList();
 
-  FastList.from(FastList<K> other)
-      : _map = Map<K, int>.from(other._map),
-        _index = other._index;
+  FastList.from(FastList<K> other) : _index = Set<K>.from(other._index);
 
   void add(K key) {
-    if (_map[key] == null) {
-      _map[key] = _index;
-      _index += 1;
-    }
+    _index.add(key);
   }
 
   bool contains(K key) {
-    return _map[key] != null;
+    return _index.contains(key);
   }
 
   void remove(K key) {
-    _map.remove(key);
+    _index.remove(key);
   }
 
   void clear() {
-    _index = 0;
-    _map = <K, int>{};
+    _index = <K>{};
   }
 
-  List<K> get keys => _map.keys.toList();
+  List<K> get keys => _index.toList();
 
-  bool get isNotEmpty => _map.isNotEmpty;
+  bool get isNotEmpty => _index.isNotEmpty;
 }

@@ -67,18 +67,21 @@ class _IndexingHolder {
 
 class SharedString {
   final XmlElement node;
+  final String _cachedStringValue;
   final int _hashCode;
 
-  SharedString({required this.node}) : _hashCode = node.toString().hashCode;
+  SharedString._({required this.node, required String stringVal, required int hash})
+      : _cachedStringValue = stringVal,
+        _hashCode = hash;
 
-  @override
-  String toString() {
-    assert(false,
-        'prefer stringValue over SharedString.toString() in development');
-    return stringValue;
+  factory SharedString({required XmlElement node}) {
+    final String stringVal = _computeStringValue(node);
+    final int hash = _computeStructuralHash(node);
+    return SharedString._(node: node, stringVal: stringVal, hash: hash);
   }
 
-  String get stringValue {
+  /// Extracts the text content from the XML node, excluding <rPh> children.
+  static String _computeStringValue(XmlElement node) {
     var buffer = StringBuffer();
     node.findAllElements('t').forEach((child) {
       if (child.parentElement == null ||
@@ -89,17 +92,45 @@ class SharedString {
     return buffer.toString();
   }
 
+  /// Computes a structural hash by walking the XML tree without serializing
+  /// to a string. Incorporates element names, attribute key-value pairs, and
+  /// text content so that structurally different nodes (e.g. plain text vs
+  /// rich text with formatting runs) produce different hashes.
+  static int _computeStructuralHash(XmlElement element) {
+    int hash = element.name.local.hashCode;
+    for (final XmlAttribute attr in element.attributes) {
+      hash = hash ^ attr.name.local.hashCode ^ attr.value.hashCode;
+    }
+    for (final XmlNode child in element.children) {
+      if (child is XmlElement) {
+        hash = hash * 31 + _computeStructuralHash(child);
+      } else if (child is XmlText) {
+        hash = hash * 31 + child.value.hashCode;
+      }
+    }
+    return hash;
+  }
+
+  @override
+  String toString() {
+    assert(false,
+        'prefer stringValue over SharedString.toString() in development');
+    return stringValue;
+  }
+
+  String get stringValue => _cachedStringValue;
+
   @override
   int get hashCode => _hashCode;
 
   @override
   operator ==(Object other) {
     return other is SharedString &&
-        other.hashCode == _hashCode &&
-        other.stringValue == stringValue;
+        other._hashCode == _hashCode &&
+        other._cachedStringValue == _cachedStringValue;
   }
 
   bool matches(String value) {
-    return value.isNotEmpty && value == stringValue;
+    return value.isNotEmpty && value == _cachedStringValue;
   }
 }

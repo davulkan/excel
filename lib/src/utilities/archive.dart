@@ -1,5 +1,7 @@
 part of excel;
 
+/// Legacy clone that decompresses and re-copies every file.
+/// Still used by Excel.delete() which needs the excludedFile parameter.
 Archive _cloneArchive(
   Archive archive,
   Map<String, ArchiveFile> _archiveFiles, {
@@ -25,4 +27,21 @@ Archive _cloneArchive(
     }
   });
   return clone;
+}
+
+/// Optimized archive builder that reuses original ArchiveFile objects
+/// for unchanged files instead of decompressing and copying them.
+Archive _buildOutputArchive(
+    Archive source, Map<String, ArchiveFile> updatedFiles) {
+  final output = Archive();
+  for (final file in source.files) {
+    if (!file.isFile) continue;
+    if (updatedFiles.containsKey(file.name)) {
+      output.addFile(updatedFiles[file.name]!);
+    } else {
+      // Reuse original ArchiveFile — no decompression needed
+      output.addFile(file);
+    }
+  }
+  return output;
 }

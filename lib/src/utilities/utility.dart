@@ -5,6 +5,17 @@ final List<String> _noCompression = <String>[
   'Thumbnails/thumbnail.png'
 ];
 
+/// Escapes text content for XML: &, <, >
+String _escapeXml(String text) {
+  if (!text.contains('&') && !text.contains('<') && !text.contains('>')) {
+    return text;
+  }
+  return text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+}
+
 String getCellId(int columnIndex, int rowIndex) {
   return '${_numericToLetters(columnIndex + 1)}${rowIndex + 1}';
 }
@@ -57,9 +68,7 @@ int? _getRowNumber(XmlElement row) {
   return int.tryParse(row.getAttribute('r').toString());
 }
 
-int _checkPosition(List<CellStyle> list, CellStyle cellStyle) {
-  return list.indexOf(cellStyle);
-}
+
 
 int _letterOnly(int rune) {
   if (65 <= rune && rune <= 90) {

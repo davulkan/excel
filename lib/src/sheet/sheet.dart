@@ -1,6 +1,14 @@
 part of excel;
 
 class Sheet {
+  /// Flyweight cache for CellStyle deduplication. Most cells share the same
+  /// style, so interning avoids keeping thousands of identical instances.
+  static final Map<CellStyle, CellStyle> _styleCache = {};
+
+  static CellStyle _internStyle(CellStyle style) {
+    return _styleCache.putIfAbsent(style, () => style);
+  }
+
   late Excel _excel;
   late String _sheet;
   late bool _isRTL;
@@ -710,16 +718,18 @@ class Sheet {
     } else {
       final cellStyleBefore =
           _sheetData[cellIndex.rowIndex]?[cellIndex.columnIndex]?.cellStyle;
-      if (cellStyleBefore != null &&
-          !cellStyleBefore.numberFormat.accepts(value)) {
-        cellStyle =
-            cellStyleBefore.copyWith(numberFormat: NumFormat.defaultFor(value));
+      if (cellStyleBefore != null) {
+        final defaultFmt = NumFormat.defaultFor(value);
+        if (cellStyleBefore.numberFormat != defaultFmt) {
+          cellStyle = cellStyleBefore.copyWith(numberFormat: defaultFmt);
+        }
       }
     }
 
     /// Puts the cellStyle
     if (cellStyle != null) {
-      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle = cellStyle;
+      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle =
+          _internStyle(cellStyle);
       _excel._styleChanges = true;
     }
   }
@@ -1095,7 +1105,6 @@ class Sheet {
     }
 
     cell._value = value;
-    cell._cellStyle = CellStyle(numberFormat: NumFormat.defaultFor(value));
 
     if ((_maxColumns - 1) < columnIndex) {
       _maxColumns = columnIndex + 1;
