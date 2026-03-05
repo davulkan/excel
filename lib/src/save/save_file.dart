@@ -139,27 +139,14 @@ class Save {
       case TextCellValue():
         int ssIndex = _excel._sharedStrings
             .indexOf(_excel._sharedStrings.tryFind(value.value)!);
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('" t="s"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(ssIndex);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC" t="s"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$ssIndex</v></c>');
 
       case FormulaCellValue():
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+
         buf.write('><f>');
         buf.write(_escapeXmlText(value.formula));
         buf.write('</f><v></v></c>');
@@ -169,47 +156,23 @@ class Save {
           NumericNumFormat() => numFormat.writeInt(value),
           _ => value.value.toString(),
         };
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(v);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$v</v></c>');
 
       case DoubleCellValue():
         final String v = switch (numFormat) {
           NumericNumFormat() => numFormat.writeDouble(value),
           _ => value.value.toString(),
         };
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(v);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$v</v></c>');
 
       case BoolCellValue():
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('" t="b"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(value.value ? '1' : '0');
-        buf.write('</v></c>');
+        buf.write('<c r="$rC" t="b"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>${value.value ? '1' : '0'}</v></c>');
 
       case DateTimeCellValue():
         final String v = switch (numFormat) {
@@ -217,17 +180,9 @@ class Save {
           _ => throw Exception(
               '$numFormat does not work for ${value.runtimeType}'),
         };
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(v);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$v</v></c>');
 
       case DateCellValue():
         final String v = switch (numFormat) {
@@ -235,17 +190,9 @@ class Save {
           _ => throw Exception(
               '$numFormat does not work for ${value.runtimeType}'),
         };
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(v);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$v</v></c>');
 
       case TimeCellValue():
         final String v = switch (numFormat) {
@@ -253,17 +200,9 @@ class Save {
           _ => throw Exception(
               '$numFormat does not work for ${value.runtimeType}'),
         };
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('"');
-        if (styleIndex >= 0) {
-          buf.write(' s="');
-          buf.write(styleIndex);
-          buf.write('"');
-        }
-        buf.write('><v>');
-        buf.write(v);
-        buf.write('</v></c>');
+        buf.write('<c r="$rC"');
+        if (styleIndex >= 0) buf.write(' s="$styleIndex"');
+        buf.write('><v>$v</v></c>');
     }
   }
 
@@ -281,22 +220,11 @@ class Save {
       double? height = customHeights[rowIndex];
       int? level = sheet.getRowLevel(rowIndex);
 
-      buf.write('<row r="');
-      buf.write(rowIndex + 1);
-      buf.write('"');
-
+      buf.write('<row r="rowIndex + 1"');
       if (height != null) {
-        buf.write(' ht="');
-        buf.write(height.toStringAsFixed(2));
-        buf.write('" customHeight="1"');
+        buf.write(' ht="${height.toStringAsFixed(2)}" customHeight="1"');
       }
-
-      if (level != null) {
-        buf.write(' outlineLevel="');
-        buf.write(level);
-        buf.write('"');
-      }
-
+      if (level != null) buf.write(' outlineLevel="$level"');
       buf.write('>');
 
       final sortedCols = columnMap.keys.toList()..sort();
