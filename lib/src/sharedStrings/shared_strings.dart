@@ -66,9 +66,12 @@ class _IndexingHolder {
 
 class SharedString {
   final XmlElement node;
+  final String _stringValue;
   final int _hashCode;
 
-  SharedString({required this.node}) : _hashCode = node.toString().hashCode;
+  SharedString({required this.node})
+      : _stringValue = _computeStringValue(node),
+        _hashCode = _computeStructuralHash(node);
 
   @override
   String toString() {
@@ -162,7 +165,8 @@ class SharedString {
     return TextSpan(text: text, children: children);
   }
 
-  String get stringValue {
+  /// Extracts the text content from the XML node, excluding <rPh> children.
+  static String _computeStringValue(XmlElement node) {
     var buffer = StringBuffer();
     node.findAllElements('t').forEach((child) {
       if (child.parentElement == null ||
@@ -173,19 +177,37 @@ class SharedString {
     return buffer.toString();
   }
 
+  /// Computes a structural hash by walking the XML tree without serializing
+  /// to a string. Incorporates element names, attribute key-value pairs, and
+  /// text content so that structurally different nodes (e.g. plain text vs
+  /// rich text with formatting runs) produce different hashes.
+  static int _computeStructuralHash(XmlElement element) {
+    int hash = element.name.local.hashCode;
+    for (final attr in element.attributes) {
+      hash = hash ^ attr.name.local.hashCode ^ attr.value.hashCode;
+    }
+    for (final child in element.children) {
+      if (child is XmlElement) {
+        hash = hash * 31 + _computeStructuralHash(child);
+      } else if (child is XmlText) {
+        hash = hash * 31 + child.value.hashCode;
+      }
+    }
+    return hash;
+  }
+
+  String get stringValue => _stringValue;
+
   @override
   int get hashCode => _hashCode;
 
   @override
-  operator ==(Object other) {
-    return other is SharedString &&
-        other.hashCode == _hashCode &&
-        other.stringValue == stringValue;
-  }
+  operator ==(Object other) =>
+      other is SharedString &&
+      other._hashCode == _hashCode &&
+      other._stringValue == _stringValue;
 
-  bool matches(String value) {
-    return value.isNotEmpty && value == stringValue;
-  }
+  bool matches(String value) => value.isNotEmpty && value == _stringValue;
 }
 
 class TextSpan {

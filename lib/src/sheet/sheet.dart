@@ -1,6 +1,13 @@
 part of excel;
 
 class Sheet {
+  /// Flyweight cache for CellStyle deduplication. Most cells share the same
+  /// style, so cahcing avoids keeping thousands of identical instances.
+  final _styleCache = <CellStyle, CellStyle>{};
+
+  /// Add style to cache and return it
+  CellStyle cacheIfAbsent(CellStyle s) => _styleCache.putIfAbsent(s, () => s);
+
   final Excel _excel;
   final String _sheet;
   bool _isRTL = false;
@@ -12,7 +19,7 @@ class Sheet {
   Map<int, double> _rowHeights = {};
   Map<int, int> _rowLevels = {};
   Map<int, bool> _columnAutoFit = {};
-  FastList<String> _spannedItems = FastList<String>();
+  Set<String> _spannedItems = {};
   List<_Span?> _spanList = [];
   Map<int, Map<int, Data>> _sheetData = {};
   HeaderFooter? _headerFooter;
@@ -36,7 +43,7 @@ class Sheet {
   Sheet._(this._excel, this._sheet,
       {Map<int, Map<int, Data>>? sh,
       List<_Span?>? spanL_,
-      FastList<String>? spanI_,
+      Set<String>? spanI_,
       int? maxRowsVal,
       int? maxColumnsVal,
       bool? isRTLVal,
@@ -52,7 +59,7 @@ class Sheet {
       _excel._mergeChangeLookup = sheetName;
     }
     if (spanI_ != null) {
-      _spannedItems = FastList<String>.from(spanI_);
+      _spannedItems = Set<String>.from(spanI_);
     }
     if (maxColumnsVal != null) {
       _maxColumns = maxColumnsVal;
@@ -430,7 +437,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -615,7 +622,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       final _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -725,6 +732,7 @@ class Sheet {
     } else {
       final cellStyleBefore =
           _sheetData[cellIndex.rowIndex]?[cellIndex.columnIndex]?.cellStyle;
+
       if (cellStyleBefore != null &&
           !cellStyleBefore.numberFormat.accepts(value)) {
         cellStyle =
@@ -734,7 +742,8 @@ class Sheet {
 
     /// Puts the cellStyle
     if (cellStyle != null) {
-      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle = cellStyle;
+      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle =
+          cacheIfAbsent(cellStyle);
       _excel._styleChanges = true;
     }
   }
@@ -1109,7 +1118,8 @@ class Sheet {
     }
 
     cell._value = value;
-    cell._cellStyle = CellStyle(numberFormat: NumFormat.defaultFor(value));
+    cell._cellStyle =
+        cacheIfAbsent(CellStyle(numberFormat: NumFormat.defaultFor(value)));
     if (cell._cellStyle != NumFormat.standard_0) {
       _excel._styleChanges = true;
     }
@@ -1421,7 +1431,7 @@ class Sheet {
   ///return type if String based cell-id
   ///
   List<String> get spannedItems {
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
 
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
@@ -1435,7 +1445,7 @@ class Sheet {
       }
     }
 
-    return _spannedItems.keys;
+    return _spannedItems.toList();
   }
 
   ///
