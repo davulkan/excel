@@ -205,7 +205,7 @@ class Save {
       double? height = customHeights[rowIndex];
       int? level = sheet.getRowLevel(rowIndex);
 
-      buf.write('<row r="rowIndex + 1"');
+      buf.write('<row r="${rowIndex + 1}"');
       if (height != null) {
         buf.write(' ht="${height.toStringAsFixed(2)}" customHeight="1"');
       }
