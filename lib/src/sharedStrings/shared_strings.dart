@@ -67,18 +67,12 @@ class _IndexingHolder {
 
 class SharedString {
   final XmlElement node;
-  final String _cachedStringValue;
+  final String _stringValue;
   final int _hashCode;
 
-  SharedString._({required this.node, required String stringVal, required int hash})
-      : _cachedStringValue = stringVal,
-        _hashCode = hash;
-
-  factory SharedString({required XmlElement node}) {
-    final String stringVal = _computeStringValue(node);
-    final int hash = _computeStructuralHash(node);
-    return SharedString._(node: node, stringVal: stringVal, hash: hash);
-  }
+  SharedString({required this.node})
+      : _stringValue = _computeStringValue(node),
+        _hashCode = _computeStructuralHash(node);
 
   /// Extracts the text content from the XML node, excluding <rPh> children.
   static String _computeStringValue(XmlElement node) {
@@ -98,10 +92,10 @@ class SharedString {
   /// rich text with formatting runs) produce different hashes.
   static int _computeStructuralHash(XmlElement element) {
     int hash = element.name.local.hashCode;
-    for (final XmlAttribute attr in element.attributes) {
+    for (final attr in element.attributes) {
       hash = hash ^ attr.name.local.hashCode ^ attr.value.hashCode;
     }
-    for (final XmlNode child in element.children) {
+    for (final child in element.children) {
       if (child is XmlElement) {
         hash = hash * 31 + _computeStructuralHash(child);
       } else if (child is XmlText) {
@@ -115,22 +109,19 @@ class SharedString {
   String toString() {
     assert(false,
         'prefer stringValue over SharedString.toString() in development');
-    return stringValue;
+    return _stringValue;
   }
 
-  String get stringValue => _cachedStringValue;
+  String get stringValue => _stringValue;
 
   @override
   int get hashCode => _hashCode;
 
   @override
-  operator ==(Object other) {
-    return other is SharedString &&
-        other._hashCode == _hashCode &&
-        other._cachedStringValue == _cachedStringValue;
-  }
+  operator ==(Object other) =>
+      other is SharedString &&
+      other._hashCode == _hashCode &&
+      other._stringValue == _stringValue;
 
-  bool matches(String value) {
-    return value.isNotEmpty && value == _cachedStringValue;
-  }
+  bool matches(String value) => value.isNotEmpty && value == _stringValue;
 }

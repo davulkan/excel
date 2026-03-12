@@ -43,8 +43,6 @@ class Save {
     return ((maxNumOfCharacters * 7.0 + 9.0) / 7.0 * 256).truncate() / 256;
   }
 
-  /// Registers a shared string for a TextCellValue and returns its index.
-  /// Does NOT build XmlElement DOM — uses the existing SharedStrings API.
   int _registerSharedString(TextCellValue val) {
     SharedString? sharedString = _excel._sharedStrings.tryFind(val.value);
     if (sharedString != null) {
@@ -55,7 +53,7 @@ class Save {
     return _excel._sharedStrings.indexOf(sharedString);
   }
 
-  /// Pre-registers all shared strings for a sheet without building DOM.
+  /// Pre-registers all shared strings for a sheet.
   void _registerSharedStringsForSheet(Sheet sheet) {
     sheet._sheetData.forEach((_, columnMap) {
       columnMap.forEach((_, data) {
