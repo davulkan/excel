@@ -8,9 +8,9 @@ class Save {
   final String? creator;
   final String? description;
 
-  /// HashMap caches for O(1) style lookups instead of O(n) indexOf calls.
-  final Map<CellStyle, int> _innerStyleCache = {};
-  final Map<CellStyle, int> _upperStyleCache = {};
+  /// Dictionaries for cell style position lookups instead of O(n) search in styles list.
+  final _innerStylePosMap = HashMap<CellStyle, int>();
+  final _upperStylePosMap = HashMap<CellStyle, int>();
 
   /// Tracks which XML file keys use streaming serialization (sheet files).
   final Set<String> _streamingSheetFiles = {};
@@ -90,9 +90,9 @@ class Save {
     }
 
     if (_excel._styleChanges && cellStyle != null) {
-      int upperLevelPos = _upperStyleCache[cellStyle] ?? -1;
+      int upperLevelPos = _upperStylePosMap[cellStyle] ?? -1;
       if (upperLevelPos == -1) {
-        int lowerLevelPos = _innerStyleCache[cellStyle] ?? -1;
+        int lowerLevelPos = _innerStylePosMap[cellStyle] ?? -1;
         if (lowerLevelPos != -1) {
           upperLevelPos = lowerLevelPos + _excel._cellStyleList.length;
         } else {
@@ -275,15 +275,15 @@ class Save {
 
   void _processStylesFile() {
     _innerCellStyle = <CellStyle>[];
-    _innerStyleCache.clear();
-    _upperStyleCache.clear();
+    _innerStylePosMap.clear();
+    _upperStylePosMap.clear();
     List<String> innerPatternFill = <String>[];
     List<_FontStyle> innerFontStyle = <_FontStyle>[];
     List<_BorderSet> innerBorderSet = <_BorderSet>[];
 
     // Build _upperStyleCache from existing _cellStyleList
     for (int i = 0; i < _excel._cellStyleList.length; i++) {
-      _upperStyleCache[_excel._cellStyleList[i]] = i;
+      _upperStylePosMap[_excel._cellStyleList[i]] = i;
     }
 
     _excel._sheetMap.forEach((sheetName, sheetObject) {
@@ -298,11 +298,11 @@ class Save {
             }
           }
           if (cs != null) {
-            if (!_upperStyleCache.containsKey(cs) &&
-                !_innerStyleCache.containsKey(cs)) {
+            if (!_upperStylePosMap.containsKey(cs) &&
+                !_innerStylePosMap.containsKey(cs)) {
               int idx = _innerCellStyle.length;
               _innerCellStyle.add(cs);
-              _innerStyleCache[cs] = idx;
+              _innerStylePosMap[cs] = idx;
             }
           }
         });

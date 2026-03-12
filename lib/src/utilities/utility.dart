@@ -68,8 +68,6 @@ int? _getRowNumber(XmlElement row) {
   return int.tryParse(row.getAttribute('r').toString());
 }
 
-
-
 int _letterOnly(int rune) {
   if (65 <= rune && rune <= 90) {
     return rune;
