@@ -13,7 +13,7 @@ class Save {
   final _upperStylePosMap = HashMap<CellStyle, int>();
 
   /// Tracks which XML file keys use streaming serialization (sheet files).
-  final Set<String> _streamingSheetFiles = {};
+  final Set<String> _xmlFilesForSheets = {};
 
   Save._(this._excel, this.parser, {this.creator, this.description}) {
     _archiveFiles = <String, ArchiveFile>{};
@@ -194,7 +194,7 @@ class Save {
   }
 
   /// Writes the full <sheetData>...</sheetData> block to the StringBuffer without tons of XmlNode dart objects.
-  void _buildSheetDataXml(StringBuffer buf, Sheet sheet, String sheetName) {
+  void _buildSheetDataXml(StringBuffer buf, Sheet sheet) {
     buf.write('<sheetData>');
 
     final customHeights = sheet.getRowHeights;
@@ -218,7 +218,8 @@ class Save {
       for (final columnIndex in sortedCols) {
         final data = columnMap[columnIndex];
         if (data == null) continue;
-        _writeCellXml(buf, sheetName, columnIndex, rowIndex, data);
+
+        _writeCellXml(buf, sheet.sheetName, columnIndex, rowIndex, data);
       }
 
       buf.write('</row>');
@@ -229,7 +230,7 @@ class Save {
 
   /// Serializes a complete sheet XML using DOM for everything except sheetData,
   /// which is streamed via StringBuffer for performance.
-  String _serializeSheetXml(String xmlFileKey, String sheetName) {
+  String _serializeSheetXml(String xmlFileKey, Sheet sheet) {
     final XmlDocument xmlDoc = _excel._xmlFiles[xmlFileKey]!;
 
     // Find sheetData element and clear its children (we'll replace this empty element later)
@@ -239,19 +240,15 @@ class Save {
     // Serialize the DOM to string — sheetData will be empty: <sheetData/> or <sheetData></sheetData>
     String xmlString = xmlDoc.toString();
 
-    // Build the streamed sheetData content
-    final Sheet sheet = _excel._sheetMap[sheetName]!;
-    final StringBuffer sheetDataBuf = StringBuffer();
-    _buildSheetDataXml(sheetDataBuf, sheet, sheetName);
-    final String streamedSheetData = sheetDataBuf.toString();
+    final sheetDataBuf = StringBuffer();
+    _buildSheetDataXml(sheetDataBuf, sheet);
 
     // Replace the empty sheetData tag with content from our sheetDataBuf
     // Handle both self-closing and open/close forms
-    xmlString = xmlString.replaceFirst(
-        RegExp(r'<sheetData\s*/>|<sheetData>\s*</sheetData>'),
-        streamedSheetData);
-
-    return xmlString;
+    return xmlString.replaceFirst(
+      RegExp(r'<sheetData\s*/>|<sheetData>\s*</sheetData>'),
+      sheetDataBuf.toString(),
+    );
   }
 
   /// Writing Font Color in [xl/styles.xml] from the Cells of the sheets.
@@ -722,12 +719,13 @@ class Save {
 
     for (var xmlFile in _excel._xmlFiles.keys) {
       String xml;
-      if (_streamingSheetFiles.contains(xmlFile)) {
+      if (_xmlFilesForSheets.contains(xmlFile)) {
         // Optimized serialization for sheet files
         final sheetName = _excel._xmlSheetId.entries
             .firstWhere((e) => e.value == xmlFile)
             .key;
-        xml = _serializeSheetXml(xmlFile, sheetName);
+
+        xml = _serializeSheetXml(xmlFile, _excel._sheetMap[sheetName]!);
       } else {
         xml = _excel._xmlFiles[xmlFile].toString();
       }
@@ -1017,7 +1015,7 @@ class Save {
   /// Writing cell contained text into the excel sheet files.
   void _setSheetElements() {
     _excel._sharedStrings.clear();
-    _streamingSheetFiles.clear();
+    _xmlFilesForSheets.clear();
 
     _excel._sheetMap.forEach((sheetName, sheetObject) {
       ///
@@ -1073,8 +1071,8 @@ class Save {
       _registerSharedStringsForSheet(sheetObject);
 
       // Track this sheet file for streaming serialization
-      final String? xmlFileKey = _excel._xmlSheetId[sheetName];
-      if (xmlFileKey != null) _streamingSheetFiles.add(xmlFileKey);
+      final xmlFileKey = _excel._xmlSheetId[sheetName];
+      if (xmlFileKey != null) _xmlFilesForSheets.add(xmlFileKey);
 
       _setHeaderFooter(sheetName);
     });
