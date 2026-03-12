@@ -90,9 +90,9 @@ class Data {
   }
 
   /// sets the user defined CellStyle in this current cell
-  set cellStyle(CellStyle? _) {
+  set cellStyle(CellStyle? s) {
     _sheet._excel._styleChanges = true;
-    _cellStyle = _ != null ? Sheet._internStyle(_) : null;
+    _cellStyle = s != null ? _sheet.cacheIfAbsent(s) : null;
   }
 
   @override

@@ -87,4 +87,6 @@ void main(List<String> args) {
   if (bytes != null) {
     print('File size: ${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB');
   }
+
+  File('benchmark_output.xlsx').deleteSync();
 }

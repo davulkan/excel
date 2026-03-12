@@ -2,12 +2,11 @@ part of excel;
 
 class Sheet {
   /// Flyweight cache for CellStyle deduplication. Most cells share the same
-  /// style, so interning avoids keeping thousands of identical instances.
-  static final Map<CellStyle, CellStyle> _styleCache = {};
+  /// style, so cahcing avoids keeping thousands of identical instances.
+  final _styleCache = <CellStyle, CellStyle>{};
 
-  static CellStyle _internStyle(CellStyle style) {
-    return _styleCache.putIfAbsent(style, () => style);
-  }
+  /// Add style to cache and return it
+  CellStyle cacheIfAbsent(CellStyle s) => _styleCache.putIfAbsent(s, () => s);
 
   late Excel _excel;
   late String _sheet;
@@ -718,18 +717,18 @@ class Sheet {
     } else {
       final cellStyleBefore =
           _sheetData[cellIndex.rowIndex]?[cellIndex.columnIndex]?.cellStyle;
-      if (cellStyleBefore != null) {
-        final defaultFmt = NumFormat.defaultFor(value);
-        if (cellStyleBefore.numberFormat != defaultFmt) {
-          cellStyle = cellStyleBefore.copyWith(numberFormat: defaultFmt);
-        }
+
+      if (cellStyleBefore != null &&
+          !cellStyleBefore.numberFormat.accepts(value)) {
+        cellStyle =
+            cellStyleBefore.copyWith(numberFormat: NumFormat.defaultFor(value));
       }
     }
 
     /// Puts the cellStyle
     if (cellStyle != null) {
       _sheetData[newRowIndex]![newColumnIndex]!._cellStyle =
-          _internStyle(cellStyle);
+          cacheIfAbsent(cellStyle);
       _excel._styleChanges = true;
     }
   }
@@ -1105,6 +1104,8 @@ class Sheet {
     }
 
     cell._value = value;
+    cell._cellStyle =
+        cacheIfAbsent(CellStyle(numberFormat: NumFormat.defaultFor(value)));
 
     if ((_maxColumns - 1) < columnIndex) {
       _maxColumns = columnIndex + 1;
