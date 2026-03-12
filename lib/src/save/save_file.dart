@@ -43,13 +43,6 @@ class Save {
     return ((maxNumOfCharacters * 7.0 + 9.0) / 7.0 * 256).truncate() / 256;
   }
 
-  // ---------------------------------------------------------------------------
-  // Streaming XML helpers
-  // ---------------------------------------------------------------------------
-
-  /// Escapes text content for XML: &, <, >
-  String _escapeXmlText(String text) => _escapeXml(text);
-
   /// Registers a shared string for a TextCellValue and returns its index.
   /// Does NOT build XmlElement DOM — uses the existing SharedStrings API.
   int _registerSharedString(TextCellValue val) {
@@ -111,7 +104,7 @@ class Save {
     return -1;
   }
 
-  /// Writes a single <c> element for a cell directly to the StringBuffer.
+  /// Writes a single <c> element for a cell directly to the StringBuffer without tons of XmlNode dart objects.
   void _writeCellXml(StringBuffer buf, String sheetName, int columnIndex,
       int rowIndex, Data data) {
     final CellValue? value = data.value;
@@ -122,13 +115,7 @@ class Save {
 
     // Handle null values: write an empty <c> element if there's a style, otherwise skip
     if (value == null) {
-      if (styleIndex >= 0) {
-        buf.write('<c r="');
-        buf.write(rC);
-        buf.write('" s="');
-        buf.write(styleIndex);
-        buf.write('"/>');
-      }
+      if (styleIndex >= 0) buf.write('<c r="$rC" s="$styleIndex"/>');
       return;
     }
 
@@ -206,7 +193,7 @@ class Save {
     }
   }
 
-  /// Writes the full <sheetData>...</sheetData> block to the StringBuffer.
+  /// Writes the full <sheetData>...</sheetData> block to the StringBuffer without tons of XmlNode dart objects.
   void _buildSheetDataXml(StringBuffer buf, Sheet sheet, String sheetName) {
     buf.write('<sheetData>');
 
@@ -245,7 +232,7 @@ class Save {
   String _serializeSheetXml(String xmlFileKey, String sheetName) {
     final XmlDocument xmlDoc = _excel._xmlFiles[xmlFileKey]!;
 
-    // Find sheetData element and clear its children (we'll replace with streamed content)
+    // Find sheetData element and clear its children (we'll replace this empty element later)
     final sheetDataElement = xmlDoc.findAllElements('sheetData').first;
     sheetDataElement.children.clear();
 
@@ -258,7 +245,7 @@ class Save {
     _buildSheetDataXml(sheetDataBuf, sheet, sheetName);
     final String streamedSheetData = sheetDataBuf.toString();
 
-    // Replace the empty sheetData tag with streamed content
+    // Replace the empty sheetData tag with content from our sheetDataBuf
     // Handle both self-closing and open/close forms
     xmlString = xmlString.replaceFirst(
         RegExp(r'<sheetData\s*/>|<sheetData>\s*</sheetData>'),
@@ -266,10 +253,6 @@ class Save {
 
     return xmlString;
   }
-
-  // ---------------------------------------------------------------------------
-  // Style processing
-  // ---------------------------------------------------------------------------
 
   /// Writing Font Color in [xl/styles.xml] from the Cells of the sheets.
 
@@ -740,7 +723,7 @@ class Save {
     for (var xmlFile in _excel._xmlFiles.keys) {
       String xml;
       if (_streamingSheetFiles.contains(xmlFile)) {
-        // Use streaming serialization for sheet files
+        // Optimized serialization for sheet files
         final sheetName = _excel._xmlSheetId.entries
             .firstWhere((e) => e.value == xmlFile)
             .key;
@@ -1032,7 +1015,6 @@ class Save {
   }
 
   /// Writing cell contained text into the excel sheet files.
-  /// Uses streaming XML for sheet data instead of building DOM trees.
   void _setSheetElements() {
     _excel._sharedStrings.clear();
     _streamingSheetFiles.clear();

@@ -6,15 +6,10 @@ final List<String> _noCompression = <String>[
 ];
 
 /// Escapes text content for XML: &, <, >
-String _escapeXml(String text) {
-  if (!text.contains('&') && !text.contains('<') && !text.contains('>')) {
-    return text;
-  }
-  return text
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;');
-}
+String _escapeXmlText(String text) => text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 
 String getCellId(int columnIndex, int rowIndex) {
   return '${_numericToLetters(columnIndex + 1)}${rowIndex + 1}';
