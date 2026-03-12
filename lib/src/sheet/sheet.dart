@@ -20,7 +20,7 @@ class Sheet {
   Map<int, double> _rowHeights = {};
   Map<int, int> _rowLevels = {};
   Map<int, bool> _columnAutoFit = {};
-  late FastList<String> _spannedItems;
+  late Set<String> _spannedItems;
   late List<_Span?> _spanList;
   late Map<int, Map<int, Data>> _sheetData;
   late HeaderFooter? _headerFooter;
@@ -44,7 +44,7 @@ class Sheet {
   Sheet._(Excel excel, String sheetName,
       {Map<int, Map<int, Data>>? sh,
       List<_Span?>? spanL_,
-      FastList<String>? spanI_,
+      Set<String>? spanI_,
       int? maxRowsVal,
       int? maxColumnsVal,
       bool? isRTLVal,
@@ -57,7 +57,7 @@ class Sheet {
     _sheet = sheetName;
     _sheetData = <int, Map<int, Data>>{};
     _spanList = <_Span?>[];
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     _isRTL = false;
     _maxRows = 0;
     _maxColumns = 0;
@@ -68,7 +68,7 @@ class Sheet {
       _excel._mergeChangeLookup = sheetName;
     }
     if (spanI_ != null) {
-      _spannedItems = FastList<String>.from(spanI_);
+      _spannedItems = Set<String>.from(spanI_);
     }
     if (maxColumnsVal != null) {
       _maxColumns = maxColumnsVal;
@@ -422,7 +422,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -611,7 +611,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       final _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -1412,7 +1412,7 @@ class Sheet {
   ///return type if String based cell-id
   ///
   List<String> get spannedItems {
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
 
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
@@ -1426,7 +1426,7 @@ class Sheet {
       }
     }
 
-    return _spannedItems.keys;
+    return _spannedItems.toList();
   }
 
   ///
