@@ -1,21 +1,28 @@
 part of excel;
 
 class Sheet {
-  late Excel _excel;
-  late String _sheet;
-  late bool _isRTL;
-  late int _maxRows;
-  late int _maxColumns;
+  /// Flyweight cache for CellStyle deduplication. Most cells share the same
+  /// style, so cahcing avoids keeping thousands of identical instances.
+  final _styleCache = <CellStyle, CellStyle>{};
+
+  /// Add style to cache and return it
+  CellStyle cacheIfAbsent(CellStyle s) => _styleCache.putIfAbsent(s, () => s);
+
+  final Excel _excel;
+  final String _sheet;
+  bool _isRTL = false;
+  int _maxRows = 0;
+  int _maxColumns = 0;
   double? _defaultColumnWidth;
   double? _defaultRowHeight;
   Map<int, double> _columnWidths = {};
   Map<int, double> _rowHeights = {};
   Map<int, int> _rowLevels = {};
   Map<int, bool> _columnAutoFit = {};
-  late FastList<String> _spannedItems;
-  late List<_Span?> _spanList;
-  late Map<int, Map<int, Data>> _sheetData;
-  late HeaderFooter? _headerFooter;
+  Set<String> _spannedItems = {};
+  List<_Span?> _spanList = [];
+  Map<int, Map<int, Data>> _sheetData = {};
+  HeaderFooter? _headerFooter;
 
   ///
   /// It will clone the object by changing the `this` reference of previous oldSheetObject and putting `new this` reference, with copying the values too
@@ -33,10 +40,10 @@ class Sheet {
             isRTLVal: oldSheetObject._isRTL,
             headerFooter: oldSheetObject._headerFooter);
 
-  Sheet._(Excel excel, String sheetName,
+  Sheet._(this._excel, this._sheet,
       {Map<int, Map<int, Data>>? sh,
       List<_Span?>? spanL_,
-      FastList<String>? spanI_,
+      Set<String>? spanI_,
       int? maxRowsVal,
       int? maxColumnsVal,
       bool? isRTLVal,
@@ -45,14 +52,6 @@ class Sheet {
       Map<int, int>? rowLevelsVal,
       Map<int, bool>? columnAutoFitVal,
       HeaderFooter? headerFooter}) {
-    _excel = excel;
-    _sheet = sheetName;
-    _sheetData = <int, Map<int, Data>>{};
-    _spanList = <_Span?>[];
-    _spannedItems = FastList<String>();
-    _isRTL = false;
-    _maxRows = 0;
-    _maxColumns = 0;
     _headerFooter = headerFooter;
 
     if (spanL_ != null) {
@@ -60,7 +59,7 @@ class Sheet {
       _excel._mergeChangeLookup = sheetName;
     }
     if (spanI_ != null) {
-      _spannedItems = FastList<String>.from(spanI_);
+      _spannedItems = Set<String>.from(spanI_);
     }
     if (maxColumnsVal != null) {
       _maxColumns = maxColumnsVal;
@@ -100,6 +99,30 @@ class Sheet {
       });
     }
     _countRowsAndColumns();
+  }
+
+  /// Removes a cell from the specified [rowIndex] and [columnIndex].
+  ///
+  /// If the specified [rowIndex] or [columnIndex] does not exist,
+  /// no action is taken.
+  ///
+  /// If the removal of the cell results in an empty row, the entire row is removed.
+  ///
+  /// Parameters:
+  ///   - [rowIndex]: The index of the row from which to remove the cell.
+  ///   - [columnIndex]: The index of the column from which to remove the cell.
+  ///
+  /// Example:
+  /// ```dart
+  /// final sheet = Spreadsheet();
+  /// sheet.removeCell(1, 2);
+  /// ```
+  void _removeCell(int rowIndex, int columnIndex) {
+    _sheetData[rowIndex]?.remove(columnIndex);
+    final rowIsEmptyAfterRemovalOfCell = _sheetData[rowIndex]?.isEmpty == true;
+    if (rowIsEmptyAfterRemovalOfCell) {
+      _sheetData.remove(rowIndex);
+    }
   }
 
   ///
@@ -414,7 +437,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -566,12 +589,8 @@ class Sheet {
           if (rowKey < rowIndex && _sheetData[rowKey] != null) {
             _data[rowKey] = Map<int, Data>.from(_sheetData[rowKey]!);
           }
-          if (rowIndex == rowKey && _sheetData[rowKey] != null) {
-            _sheetData.remove(rowKey);
-          }
           if (rowIndex < rowKey && _sheetData[rowKey] != null) {
             _data[rowKey - 1] = Map<int, Data>.from(_sheetData[rowKey]!);
-            _sheetData.remove(rowKey);
           }
         });
         _sheetData = Map<int, Map<int, Data>>.from(_data);
@@ -603,7 +622,7 @@ class Sheet {
 
     bool updateSpanCell = false;
 
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
     for (int i = 0; i < _spanList.length; i++) {
       final _Span? spanObj = _spanList[i];
       if (spanObj == null) {
@@ -653,6 +672,9 @@ class Sheet {
           }
           if (rowIndex <= rowKey) {
             _data[rowKey + 1] = _sheetData[rowKey]!;
+            _data[rowKey + 1]!.forEach((key, value) {
+              value._rowIndex++;
+            });
           }
         });
       }
@@ -661,9 +683,9 @@ class Sheet {
     _sheetData = Map<int, Map<int, Data>>.from(_data);
 
     if (_maxRows - 1 <= rowIndex) {
-      _maxRows += 1;
-    } else {
       _maxRows = rowIndex + 1;
+    } else {
+      _maxRows += 1;
     }
 
     //_countRowsAndColumns();
@@ -710,6 +732,7 @@ class Sheet {
     } else {
       final cellStyleBefore =
           _sheetData[cellIndex.rowIndex]?[cellIndex.columnIndex]?.cellStyle;
+
       if (cellStyleBefore != null &&
           !cellStyleBefore.numberFormat.accepts(value)) {
         cellStyle =
@@ -719,7 +742,8 @@ class Sheet {
 
     /// Puts the cellStyle
     if (cellStyle != null) {
-      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle = cellStyle;
+      _sheetData[newRowIndex]![newColumnIndex]!._cellStyle =
+          cacheIfAbsent(cellStyle);
       _excel._styleChanges = true;
     }
   }
@@ -1034,8 +1058,12 @@ class Sheet {
   ///
   /// [overwriteMergedCells] when set to [false] puts the cell value in next unique cell available and putting the value in merged cells only once.
   ///
-  void insertRowIterables(List<CellValue?> row, int rowIndex,
-      {int startingColumn = 0, bool overwriteMergedCells = true}) {
+  void insertRowIterables(
+    List<CellValue?> row,
+    int rowIndex, {
+    int startingColumn = 0,
+    bool overwriteMergedCells = true,
+  }) {
     if (row.isEmpty || rowIndex < 0) {
       return;
     }
@@ -1054,9 +1082,7 @@ class Sheet {
       // Normally iterating and putting the data present in the [row] as we are on the last index.
 
       while (currentRowPosition <= maxIterationIndex) {
-        _putData(rowIndex, columnIndex, row[currentRowPosition]);
-        currentRowPosition++;
-        columnIndex++;
+        _putData(rowIndex, columnIndex++, row[currentRowPosition++]);
       }
     } else {
       // expensive function as per time complexity
@@ -1065,15 +1091,12 @@ class Sheet {
 
       if (_spanObjectsList.isEmpty) {
         while (currentRowPosition <= maxIterationIndex) {
-          _putData(rowIndex, columnIndex, row[currentRowPosition]);
-          currentRowPosition++;
-          columnIndex++;
+          _putData(rowIndex, columnIndex++, row[currentRowPosition++]);
         }
       } else {
         while (currentRowPosition <= maxIterationIndex) {
           if (_isInsideSpanObject(_spanObjectsList, columnIndex, rowIndex)) {
-            _putData(rowIndex, columnIndex, row[currentRowPosition]);
-            currentRowPosition++;
+            _putData(rowIndex, columnIndex, row[currentRowPosition++]);
           }
           columnIndex++;
         }
@@ -1095,7 +1118,11 @@ class Sheet {
     }
 
     cell._value = value;
-    cell._cellStyle = CellStyle(numberFormat: NumFormat.defaultFor(value));
+    cell._cellStyle =
+        cacheIfAbsent(CellStyle(numberFormat: NumFormat.defaultFor(value)));
+    if (cell._cellStyle != NumFormat.standard_0) {
+      _excel._styleChanges = true;
+    }
 
     if ((_maxColumns - 1) < columnIndex) {
       _maxColumns = columnIndex + 1;
@@ -1286,7 +1313,8 @@ class Sheet {
         if (sourceData is! TextCellValue) {
           continue;
         }
-        final result = sourceData.value.replaceAllMapped(source, (match) {
+        final result =
+            sourceData.value.toString().replaceAllMapped(source, (match) {
           if (first == -1 || first != replaceCount) {
             ++replaceCount;
             return match.input.replaceRange(match.start, match.end, target);
@@ -1403,7 +1431,7 @@ class Sheet {
   ///return type if String based cell-id
   ///
   List<String> get spannedItems {
-    _spannedItems = FastList<String>();
+    _spannedItems = Set<String>();
 
     for (int i = 0; i < _spanList.length; i++) {
       _Span? spanObj = _spanList[i];
@@ -1417,7 +1445,7 @@ class Sheet {
       }
     }
 
-    return _spannedItems.keys;
+    return _spannedItems.toList();
   }
 
   ///

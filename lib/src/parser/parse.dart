@@ -1,14 +1,11 @@
 part of excel;
 
 class Parser {
-  late Excel _excel;
-  late List<String> _rId;
-  late Map<String, String> _worksheetTargets;
-  Parser._(Excel excel) {
-    this._excel = excel;
-    this._rId = <String>[];
-    this._worksheetTargets = <String, String>{};
-  }
+  final Excel _excel;
+  final List<String> _rId = [];
+  final Map<String, String> _worksheetTargets = {};
+
+  Parser._(this._excel);
 
   void _startParsing() {
     _putContentXml();
@@ -166,18 +163,25 @@ class Parser {
     });
   }
 
+  /// Parses and processes merged cells within the spreadsheet.
+  ///
+  /// This method identifies merged cell regions in each sheet of the spreadsheet
+  /// and handles them accordingly. It removes all cells within a merged cell region
+  /// except for the top-left cell, preserving its content.
   void _parseMergedCells() {
     Map spannedCells = <String, List<String>>{};
     _excel._sheets.forEach((sheetName, node) {
       _excel._availSheet(sheetName);
-      XmlElement elementNode = node as XmlElement;
+      XmlElement sheetDataNode = node as XmlElement;
       List spanList = <String>[];
+      final sheet = _excel._sheetMap[sheetName]!;
 
-      elementNode.findAllElements('mergeCell').forEach((elemen) {
-        String? ref = elemen.getAttribute('ref');
+      final worksheetNode = sheetDataNode.parent;
+      worksheetNode!.findAllElements('mergeCell').forEach((element) {
+        String? ref = element.getAttribute('ref');
         if (ref != null && ref.contains(':') && ref.split(':').length == 2) {
-          if (!_excel._sheetMap[sheetName]!._spannedItems.contains(ref)) {
-            _excel._sheetMap[sheetName]!._spannedItems.add(ref);
+          if (!sheet._spannedItems.contains(ref)) {
+            sheet._spannedItems.add(ref);
           }
 
           String startCell = ref.split(':')[0], endCell = ref.split(':')[1];
@@ -193,26 +197,43 @@ class Parser {
             start: startIndex,
             end: endIndex,
           );
-          if (!_excel._sheetMap[sheetName]!._spanList.contains(spanObj)) {
-            _excel._sheetMap[sheetName]!._spanList.add(spanObj);
+          if (!sheet._spanList.contains(spanObj)) {
+            sheet._spanList.add(spanObj);
+
+            _deleteAllButTopLeftCellsOfSpanObj(spanObj, sheet);
           }
           _excel._mergeChangeLookup = sheetName;
         }
       });
     });
+  }
 
-    // Remove those cells which are present inside the
-    _excel._sheetMap.forEach((sheetName, sheetObject) {
-      if (spannedCells.containsKey(sheetName)) {
-        sheetObject._sheetData.forEach((row, columnMap) {
-          columnMap.forEach((column, dataObject) {
-            if (!(spannedCells[sheetName].contains(getCellId(column, row)))) {
-              _excel[sheetName]._sheetData[row]?.remove(column);
-            }
-          });
-        });
+  /// Deletes all cells within the span of the given [_Span] object
+  /// except for the top-left cell.
+  ///
+  /// This method is used internally by [_parseMergedCells] to remove
+  /// cells within merged cell regions.
+  ///
+  /// Parameters:
+  ///   - [spanObj]: The span object representing the merged cell region.
+  ///   - [sheet]: The sheet object from which cells are to be removed.
+  void _deleteAllButTopLeftCellsOfSpanObj(_Span spanObj, Sheet sheet) {
+    final columnSpanStart = spanObj.columnSpanStart;
+    final columnSpanEnd = spanObj.columnSpanEnd;
+    final rowSpanStart = spanObj.rowSpanStart;
+    final rowSpanEnd = spanObj.rowSpanEnd;
+
+    for (var columnI = columnSpanStart; columnI <= columnSpanEnd; columnI++) {
+      for (var rowI = rowSpanStart; rowI <= rowSpanEnd; rowI++) {
+        bool isTopLeftCellThatShouldNotBeDeleted =
+            columnI == columnSpanStart && rowI == rowSpanStart;
+
+        if (isTopLeftCellThatShouldNotBeDeleted) {
+          continue;
+        }
+        sheet._removeCell(rowI, columnI);
       }
-    });
+    }
   }
 
   // Reading the styles from the excel file.
@@ -297,13 +318,10 @@ class Parser {
         node1.findAllElements('numFmt').forEach((node) {
           final numFmtId = int.parse(node.getAttribute('numFmtId')!);
           final formatCode = node.getAttribute('formatCode')!;
-          // if (numFmtId < 164) {
-          //   throw Exception(
-          //       'custom numFmtId starts at 164 but found a value of $numFmtId');
-          // }
-
-          _excel._numFormats
-              .add(numFmtId, NumFormat.custom(formatCode: formatCode));
+          if (numFmtId >= 164) {
+            _excel._numFormats
+                .add(numFmtId, NumFormat.custom(formatCode: formatCode));
+          }
         });
       });
 
@@ -412,7 +430,7 @@ class Parser {
                 textWrapping = TextWrapping.Clip;
               }
 
-              var vertical = node.getAttribute('vertical');
+              var vertical = child.getAttribute('vertical');
               if (vertical != null) {
                 if (vertical.toString() == 'top') {
                   verticalAlign = VerticalAlign.Top;
@@ -421,7 +439,7 @@ class Parser {
                 }
               }
 
-              var horizontal = node.getAttribute('horizontal');
+              var horizontal = child.getAttribute('horizontal');
               if (horizontal != null) {
                 if (horizontal.toString() == 'center') {
                   horizontalAlign = HorizontalAlign.Center;
@@ -430,7 +448,7 @@ class Parser {
                 }
               }
 
-              var rotationString = node.getAttribute('textRotation');
+              var rotationString = child.getAttribute('textRotation');
               if (rotationString != null) {
                 rotation = (double.tryParse(rotationString) ?? 0.0).floor();
               }
@@ -537,6 +555,7 @@ class Parser {
     });
 
     _parseHeaderFooter(worksheet, sheetObject);
+    _parseColWidthsRowHeights(worksheet, sheetObject);
 
     _excel._sheets[name] = sheet;
 
@@ -588,7 +607,7 @@ class Parser {
       case 's':
         final sharedString = _excel._sharedStrings
             .value(int.parse(_parseValue(node.findElements('v').first)));
-        value = TextCellValue(sharedString!.stringValue);
+        value = TextCellValue.span(sharedString!.textSpan);
         break;
       // boolean
       case 'b':
@@ -786,5 +805,84 @@ class Parser {
     final headerFooterElement = results.first;
 
     sheetObject.headerFooter = HeaderFooter.fromXmlElement(headerFooterElement);
+  }
+
+  void _parseColWidthsRowHeights(XmlElement worksheet, Sheet sheetObject) {
+    /* parse default column width and default row height
+      example XML content
+      <sheetFormatPr baseColWidth="10" defaultColWidth="26.33203125" defaultRowHeight="13" x14ac:dyDescent="0.15" />
+    */
+    Iterable<XmlElement> results;
+    results = worksheet.findAllElements("sheetFormatPr");
+    if (results.isNotEmpty) {
+      results.forEach((element) {
+        double? defaultColWidth;
+        double? defaultRowHeight;
+        // default column width
+        String? widthAttribute = element.getAttribute("defaultColWidth");
+        if (widthAttribute != null) {
+          defaultColWidth = double.tryParse(widthAttribute);
+        }
+        // default row height
+        String? rowHeightAttribute = element.getAttribute("defaultRowHeight");
+        if (rowHeightAttribute != null) {
+          defaultRowHeight = double.tryParse(rowHeightAttribute);
+        }
+
+        // both values valid ?
+        if (defaultColWidth != null && defaultRowHeight != null) {
+          sheetObject._defaultColumnWidth = defaultColWidth;
+          sheetObject._defaultRowHeight = defaultRowHeight;
+        }
+      });
+    }
+
+    /* parse custom column height
+      example XML content
+      <col min="2" max="2" width="71.83203125" customWidth="1"/>, 
+      <col min="4" max="4" width="26.5" customWidth="1"/>, 
+      <col min="6" max="6" width="31.33203125" customWidth="1"/>
+    */
+    results = worksheet.findAllElements("col");
+    if (results.isNotEmpty) {
+      results.forEach((element) {
+        String? colAttribute =
+            element.getAttribute("min"); // i think min refers to the column
+        String? widthAttribute = element.getAttribute("width");
+        if (colAttribute != null && widthAttribute != null) {
+          int? col = int.tryParse(colAttribute);
+          double? width = double.tryParse(widthAttribute);
+          if (col != null && width != null) {
+            col -= 1; // first col in _columnWidths is index 0
+            if (col >= 0) {
+              sheetObject._columnWidths[col] = width;
+            }
+          }
+        }
+      });
+    }
+
+    /* parse custom row height
+      example XML content
+      <row r="1" spans="1:2" ht="44" customHeight="1" x14ac:dyDescent="0.15">
+    */
+    results = worksheet.findAllElements("row");
+    if (results.isNotEmpty) {
+      results.forEach((element) {
+        String? rowAttribute =
+            element.getAttribute("r"); // i think min refers to the column
+        String? heightAttribute = element.getAttribute("ht");
+        if (rowAttribute != null && heightAttribute != null) {
+          int? row = int.tryParse(rowAttribute);
+          double? height = double.tryParse(heightAttribute);
+          if (row != null && height != null) {
+            row -= 1; // first col in _rowHeights is index 0
+            if (row >= 0) {
+              sheetObject._rowHeights[row] = height;
+            }
+          }
+        }
+      });
+    }
   }
 }

@@ -23,31 +23,33 @@ Excel _newExcel(Archive archive) {
 
 /// Decode a excel file.
 class Excel {
-  late bool _styleChanges;
-  late bool _mergeChanges;
-  late bool _rtlChanges;
+  bool _styleChanges = false;
+  bool _mergeChanges = false;
+  bool _rtlChanges = false;
 
-  late Archive _archive;
+  /// Initial xlsx file archive, if this object was created by Excel.decode...
+  /// If this Excel object is created from ground up, [_archive] field will be empty
+  Archive _archive;
 
-  late Map<String, XmlNode> _sheets;
-  late Map<String, XmlDocument> _xmlFiles;
-  late Map<String, String> _xmlSheetId;
-  late Map<String, Map<String, int>> _cellStyleReferenced;
-  late Map<String, Sheet> _sheetMap;
+  final Map<String, XmlNode> _sheets = {};
+  final Map<String, XmlDocument> _xmlFiles = {};
+  final Map<String, String> _xmlSheetId = {};
+  final Map<String, Map<String, int>> _cellStyleReferenced = {};
+  final Map<String, Sheet> _sheetMap = {};
 
-  late List<CellStyle> _cellStyleList;
-  late List<String> _patternFill;
-  late List<String> _mergeChangeLook;
-  late List<String> _rtlChangeLook;
-  late List<_FontStyle> _fontStyleList;
-  late List<int> _numFmtIds;
-  late NumFormatMaintainer _numFormats = NumFormatMaintainer();
-  late List<_BorderSet> _borderSetList;
+  List<CellStyle> _cellStyleList = [];
+  List<String> _patternFill = [];
+  final List<String> _mergeChangeLook = [];
+  final List<String> _rtlChangeLook = [];
+  List<_FontStyle> _fontStyleList = [];
+  final List<int> _numFmtIds = [];
+  final NumFormatMaintainer _numFormats = NumFormatMaintainer();
+  List<_BorderSet> _borderSetList = [];
 
-  late _SharedStringsMaintainer _sharedStrings;
+  _SharedStringsMaintainer _sharedStrings = _SharedStringsMaintainer._();
 
-  late String _stylesTarget;
-  late String _sharedStringsTarget;
+  String _stylesTarget = '';
+  String _sharedStringsTarget = '';
   String get _absSharedStringsTarget {
     if (_sharedStringsTarget.isNotEmpty && _sharedStringsTarget[0] == "/") {
       return _sharedStringsTarget.substring(1);
@@ -58,26 +60,7 @@ class Excel {
   String? _defaultSheet;
   late Parser parser;
 
-  Excel._(Archive archive) {
-    _styleChanges = false;
-    _mergeChanges = false;
-    _rtlChanges = false;
-    _sheets = <String, XmlNode>{};
-    _xmlFiles = <String, XmlDocument>{};
-    _xmlSheetId = <String, String>{};
-    _cellStyleReferenced = <String, Map<String, int>>{};
-    _sheetMap = <String, Sheet>{};
-    _cellStyleList = <CellStyle>[];
-    _patternFill = <String>[];
-    _mergeChangeLook = <String>[];
-    _rtlChangeLook = <String>[];
-    _fontStyleList = <_FontStyle>[];
-    _numFmtIds = <int>[];
-    _stylesTarget = '';
-    _sharedStringsTarget = '';
-
-    _archive = archive;
-    _sharedStrings = _SharedStringsMaintainer._();
+  Excel._(this._archive) {
     parser = Parser._(this);
     parser._startParsing();
   }
@@ -98,7 +81,7 @@ class Excel {
   }
 
   factory Excel.decodeBuffer(InputStream input) {
-    return _newExcel(ZipDecoder().decodeBuffer(input));
+    return _newExcel(ZipDecoder().decodeStream(input));
   }
 
   ///
@@ -324,7 +307,7 @@ class Excel {
   ///It will start setting the edited values of `sheets` into the `files` and then `exports the file`.
   ///
   List<int>? encode({String? creator, String? description}) {
-    Save s = Save._(this, parser, creator: creator, description: description);
+    final s = Save._(this, parser, creator: creator, description: description);
     return s._save();
   }
 

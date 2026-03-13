@@ -55,10 +55,9 @@ class _SharedStringsMaintainer {
 
 class _IndexingHolder {
   final int index;
-  late int count;
-  _IndexingHolder(this.index, [int _count = 1]) {
-    this.count = _count;
-  }
+  int count;
+
+  _IndexingHolder(this.index, [int _count = 1]) : count = _count;
 
   void increaseCount() {
     this.count += 1;
@@ -67,9 +66,12 @@ class _IndexingHolder {
 
 class SharedString {
   final XmlElement node;
+  final String _stringValue;
   final int _hashCode;
 
-  SharedString({required this.node}) : _hashCode = node.toString().hashCode;
+  SharedString({required this.node})
+      : _stringValue = _computeStringValue(node),
+        _hashCode = _computeStructuralHash(node);
 
   @override
   String toString() {
@@ -78,7 +80,93 @@ class SharedString {
     return stringValue;
   }
 
-  String get stringValue {
+  TextSpan get textSpan {
+    bool getBool(XmlElement element) {
+      return bool.tryParse(element.getAttribute('val') ?? '') ?? true;
+    }
+
+    int getDouble(XmlElement element) {
+      // Should be double
+      return double.parse(element.getAttribute('val')!).toInt();
+    }
+
+    String? text;
+    List<TextSpan>? children;
+
+    /// SharedStringItem
+    /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.sharedstringitem?view=openxml-3.0.1
+    assert(node.localName == 'si'); //18.4.8 si (String Item)
+
+    for (final child in node.childElements) {
+      switch (child.localName) {
+        /// Text
+        /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.text?view=openxml-3.0.1
+        case 't': //18.4.12 t (Text)
+          text = (text ?? '') + child.innerText;
+          break;
+
+        /// Rich Text Run
+        /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.run?view=openxml-3.0.1
+        case 'r': //18.4.4 r (Rich Text Run)
+          var style = CellStyle();
+          for (final runChild in child.childElements) {
+            switch (runChild.localName) {
+              /// RunProperties
+              /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.runproperties?view=openxml-3.0.1
+              case 'rPr':
+                for (final runProperty in runChild.childElements) {
+                  switch (runProperty.localName) {
+                    case 'b': //18.8.2 b (Bold)
+                      style = style.copyWith(boldVal: getBool(runProperty));
+                      break;
+                    case 'i': //18.8.26 i (Italic)
+                      style = style.copyWith(italicVal: getBool(runProperty));
+                      break;
+                    case 'u': //18.4.13 u (Underline)
+                      style = style.copyWith(
+                          underlineVal:
+                              runProperty.getAttribute('val') == 'double'
+                                  ? Underline.Double
+                                  : Underline.Single);
+                      break;
+                    case 'sz': //18.4.11 sz (Font Size)
+                      style =
+                          style.copyWith(fontSizeVal: getDouble(runProperty));
+                      break;
+                    case 'rFont': //18.4.5 rFont (Font)
+                      style = style.copyWith(
+                          fontFamilyVal: runProperty.getAttribute('val'));
+                      break;
+                    case 'color': //18.3.1.15 color (Data Bar Color)
+                      style = style.copyWith(
+                          fontColorHexVal:
+                              runProperty.getAttribute('rgb')?.excelColor);
+                      break;
+                  }
+                }
+                break;
+
+              /// Text
+              case 't': //18.4.12 t (Text)
+                if (children == null) children = [];
+                children.add(TextSpan(text: runChild.innerText, style: style));
+                break;
+            }
+          }
+          break;
+
+        /// Phonetic Run
+        /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.phoneticrun?view=openxml-3.0.1
+        case 'rPh': //18.4.6 rPh (Phonetic Run)
+          break;
+      }
+    }
+
+    return TextSpan(text: text, children: children);
+  }
+
+  /// Extracts the text content from the XML node, excluding <rPh> children.
+  static String _computeStringValue(XmlElement node) {
     var buffer = StringBuffer();
     node.findAllElements('t').forEach((child) {
       if (child.parentElement == null ||
@@ -89,17 +177,65 @@ class SharedString {
     return buffer.toString();
   }
 
+  /// Computes a structural hash by walking the XML tree without serializing
+  /// to a string. Incorporates element names, attribute key-value pairs, and
+  /// text content so that structurally different nodes (e.g. plain text vs
+  /// rich text with formatting runs) produce different hashes.
+  static int _computeStructuralHash(XmlElement element) {
+    int hash = element.name.local.hashCode;
+    for (final attr in element.attributes) {
+      hash = hash ^ attr.name.local.hashCode ^ attr.value.hashCode;
+    }
+    for (final child in element.children) {
+      if (child is XmlElement) {
+        hash = hash * 31 + _computeStructuralHash(child);
+      } else if (child is XmlText) {
+        hash = hash * 31 + child.value.hashCode;
+      }
+    }
+    return hash;
+  }
+
+  String get stringValue => _stringValue;
+
   @override
   int get hashCode => _hashCode;
 
   @override
-  operator ==(Object other) {
-    return other is SharedString &&
-        other.hashCode == _hashCode &&
-        other.stringValue == stringValue;
+  operator ==(Object other) =>
+      other is SharedString &&
+      other._hashCode == _hashCode &&
+      other._stringValue == _stringValue;
+
+  bool matches(String value) => value.isNotEmpty && value == _stringValue;
+}
+
+class TextSpan {
+  final String? text;
+  final List<TextSpan>? children;
+  final CellStyle? style;
+
+  const TextSpan({this.children, this.text, this.style});
+
+  @override
+  String toString() {
+    String r = '';
+    if (text != null) r += text!;
+    if (children != null) r += children!.join();
+    return r;
   }
 
-  bool matches(String value) {
-    return value.isNotEmpty && value == stringValue;
+  @override
+  operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other.runtimeType != runtimeType) return false;
+    return other is TextSpan &&
+        other.text == text &&
+        other.style == style &&
+        ListEquality().equals(other.children, children);
   }
+
+  @override
+  int get hashCode =>
+      Object.hash(text, style, Object.hashAll(children ?? const []));
 }

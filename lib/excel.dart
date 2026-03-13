@@ -1,8 +1,8 @@
 library excel;
 
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
@@ -22,7 +22,6 @@ part 'src/number_format/num_format.dart';
 
 /// Utilities
 part 'src/utilities/span.dart';
-part 'src/utilities/fast_list.dart';
 part 'src/utilities/utility.dart';
 part 'src/utilities/constants.dart';
 part 'src/utilities/enum.dart';
