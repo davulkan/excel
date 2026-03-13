@@ -430,7 +430,7 @@ class Parser {
                 textWrapping = TextWrapping.Clip;
               }
 
-              var vertical = node.getAttribute('vertical');
+              var vertical = child.getAttribute('vertical');
               if (vertical != null) {
                 if (vertical.toString() == 'top') {
                   verticalAlign = VerticalAlign.Top;
@@ -439,7 +439,7 @@ class Parser {
                 }
               }
 
-              var horizontal = node.getAttribute('horizontal');
+              var horizontal = child.getAttribute('horizontal');
               if (horizontal != null) {
                 if (horizontal.toString() == 'center') {
                   horizontalAlign = HorizontalAlign.Center;
@@ -448,7 +448,7 @@ class Parser {
                 }
               }
 
-              var rotationString = node.getAttribute('textRotation');
+              var rotationString = child.getAttribute('textRotation');
               if (rotationString != null) {
                 rotation = (double.tryParse(rotationString) ?? 0.0).floor();
               }
