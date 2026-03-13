@@ -311,15 +311,6 @@ class Excel {
     return s._save();
   }
 
-  /// Creates full xlsx archive in memory and then starts encoding its bytes to OutputFileStream created from [targetFilePath]
-  void encodeToFileStream(String targetFilePath,
-      {String? creator, String? description}) {
-    final s = Save._(this, parser, creator: creator, description: description);
-    final stream = OutputFileStream(targetFilePath);
-    s._saveToStream(stream);
-    stream.close();
-  }
-
   /// Starts Saving the file.
   /// `On Web`
   /// ```
