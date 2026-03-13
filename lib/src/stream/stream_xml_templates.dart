@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'stream_shared_strings.dart' show escapeXmlForStream;
+import '../../excel.dart' show escapeXmlText;
 
 /// Generates minimal XML scaffolding files for the streaming writer.
 class StreamXmlTemplates {
@@ -12,8 +12,7 @@ class StreamXmlTemplates {
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">');
     buf.write(
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>');
-    buf.write(
-        '<Default Extension="xml" ContentType="application/xml"/>');
+    buf.write('<Default Extension="xml" ContentType="application/xml"/>');
     buf.write(
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>');
     for (var i = 0; i < sheetNames.length; i++) {
@@ -70,7 +69,7 @@ class StreamXmlTemplates {
     buf.write('<sheets>');
     for (var i = 0; i < sheetNames.length; i++) {
       buf.write(
-          '<sheet name="${escapeXmlForStream(sheetNames[i])}" sheetId="${i + 1}" r:id="rId${i + 1}"/>');
+          '<sheet name="${escapeXmlText(sheetNames[i])}" sheetId="${i + 1}" r:id="rId${i + 1}"/>');
     }
     buf.write('</sheets>');
     buf.write('</workbook>');

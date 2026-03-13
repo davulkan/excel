@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../excel.dart' show escapeXmlText;
+
 /// Collects unique strings for the streaming writer's shared string table.
 class SharedStringCollector {
   final Map<String, int> _map = {};
@@ -35,21 +37,10 @@ class SharedStringCollector {
         buf.write(' xml:space="preserve"');
       }
       buf.write('>');
-      buf.write(escapeXmlForStream(s));
+      buf.write(escapeXmlText(s));
       buf.write('</t></si>');
     }
     buf.write('</sst>');
     return utf8.encode(buf.toString());
   }
-}
-
-/// Escapes text content for XML: &, <, >
-String escapeXmlForStream(String text) {
-  if (!text.contains('&') && !text.contains('<') && !text.contains('>')) {
-    return text;
-  }
-  return text
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;');
 }

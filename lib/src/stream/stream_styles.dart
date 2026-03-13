@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:excel/excel.dart';
 
-import 'stream_shared_strings.dart' show escapeXmlForStream;
-
 /// Manages styles for the streaming writer.
 ///
 /// Pre-populates default styles for each value type. Users can register
@@ -19,10 +17,8 @@ class StreamStyleManager {
 
   StreamStyleManager() {
     _defaultGeneralIdx = _addStyle(CellStyle());
-    _defaultDateIdx =
-        _addStyle(CellStyle(numberFormat: NumFormat.defaultDate));
-    _defaultTimeIdx =
-        _addStyle(CellStyle(numberFormat: NumFormat.defaultTime));
+    _defaultDateIdx = _addStyle(CellStyle(numberFormat: NumFormat.defaultDate));
+    _defaultTimeIdx = _addStyle(CellStyle(numberFormat: NumFormat.defaultTime));
     _defaultDateTimeIdx =
         _addStyle(CellStyle(numberFormat: NumFormat.defaultDateTime));
   }
@@ -124,7 +120,7 @@ class StreamStyleManager {
       buf.write('<numFmts count="${numFmtEntries.length}">');
       for (final e in numFmtEntries.entries) {
         buf.write(
-            '<numFmt numFmtId="${e.key}" formatCode="${escapeXmlForStream(e.value)}"/>');
+            '<numFmt numFmtId="${e.key}" formatCode="${escapeXmlText(e.value)}"/>');
       }
       buf.write('</numFmts>');
     }
@@ -146,11 +142,9 @@ class StreamStyleManager {
       } else {
         buf.write('<color theme="1"/>');
       }
-      buf.write(
-          '<name val="${escapeXmlForStream(f.fontFamily ?? 'Calibri')}"/>');
+      buf.write('<name val="${escapeXmlText(f.fontFamily ?? 'Calibri')}"/>');
       if (f.fontScheme != FontScheme.Unset) {
-        final scheme =
-            f.fontScheme == FontScheme.Major ? 'major' : 'minor';
+        final scheme = f.fontScheme == FontScheme.Major ? 'major' : 'minor';
         buf.write('<scheme val="$scheme"/>');
       }
       buf.write('</font>');
@@ -163,8 +157,7 @@ class StreamStyleManager {
       if (fill == 'none' || fill == 'gray125' || fill == 'lightGray') {
         buf.write('<fill><patternFill patternType="$fill"/></fill>');
       } else {
-        buf.write(
-            '<fill><patternFill patternType="solid">'
+        buf.write('<fill><patternFill patternType="solid">'
             '<fgColor rgb="$fill"/><bgColor rgb="$fill"/>'
             '</patternFill></fill>');
       }

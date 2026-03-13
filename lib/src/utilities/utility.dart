@@ -6,7 +6,7 @@ final List<String> _noCompression = <String>[
 ];
 
 /// Escapes text content for XML: &, <, >
-String _escapeXmlText(String text) => text
+String escapeXmlText(String text) => text
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');

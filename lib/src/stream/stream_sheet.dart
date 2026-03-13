@@ -2,10 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:excel/excel.dart';
-
-import 'stream_shared_strings.dart'
-    show SharedStringCollector, escapeXmlForStream;
+import '../../excel.dart';
+import 'stream_shared_strings.dart';
 import 'stream_styles.dart';
 
 /// Pre-computed column letter cache. Avoids repeated _numericToLetters calls.
@@ -131,12 +129,7 @@ class StreamSheet {
 
     if (value == null) {
       if (styleIndex > 0) {
-        _buf.write('<c r="');
-        _buf.write(colLetter);
-        _buf.write(rowNum);
-        _buf.write('" s="');
-        _buf.write(styleIndex);
-        _buf.write('"/>');
+        _buf.write('<c r="$colLetter$rowNum" s="$styleIndex"/>');
       }
       return;
     }
@@ -144,117 +137,63 @@ class StreamSheet {
     final numFormat = cellStyle?.numberFormat ?? NumFormat.defaultFor(value);
 
     // Common cell opening: <c r="AB12"
-    _buf.write('<c r="');
-    _buf.write(colLetter);
-    _buf.write(rowNum);
-    _buf.write('"');
+    _buf.write('<c r="$colLetter$rowNum"');
 
     switch (value) {
       case TextCellValue():
         final ssIdx = _strings.getOrAdd(value.toString());
         _buf.write(' t="s"');
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
-        }
-        _buf.write('><v>');
-        _buf.write(ssIdx);
-        _buf.write('</v></c>');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        _buf.write('><v>$ssIdx</v></c>');
 
       case FormulaCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
-        }
-        _buf.write('><f>');
-        _buf.write(escapeXmlForStream(value.formula));
-        _buf.write('</f><v></v></c>');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        _buf.write('><f>${escapeXmlText(value.formula)}</f><v></v></c>');
 
       case IntCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
-        }
-        _buf.write('><v>');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
         final v = switch (numFormat) {
           NumericNumFormat() => numFormat.writeInt(value),
           _ => value.value.toString(),
         };
-        _buf.write(v);
-        _buf.write('</v></c>');
+        _buf.write('><v>$v</v></c>');
 
       case DoubleCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
-        }
-        _buf.write('><v>');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
         final v = switch (numFormat) {
           NumericNumFormat() => numFormat.writeDouble(value),
           _ => value.value.toString(),
         };
-        _buf.write(v);
-        _buf.write('</v></c>');
+        _buf.write('><v>$v</v></c>');
 
       case BoolCellValue():
         _buf.write(' t="b"');
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
-        }
-        _buf.write('><v>');
-        _buf.write(value.value ? '1' : '0');
-        _buf.write('</v></c>');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        _buf.write('><v>${value.value ? '1' : '0'}</v></c>');
 
       case DateTimeCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        if (numFormat is! DateTimeNumFormat) {
+          throw Exception('$numFormat does not work for ${value.runtimeType}');
         }
-        _buf.write('><v>');
-        final v = switch (numFormat) {
-          DateTimeNumFormat() => numFormat.writeDateTime(value),
-          _ => throw Exception(
-              '$numFormat does not work for ${value.runtimeType}'),
-        };
-        _buf.write(v);
-        _buf.write('</v></c>');
+        final v = numFormat.writeDateTime(value);
+        _buf.write('><v>$v</v></c>');
 
       case DateCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        if (numFormat is! DateTimeNumFormat) {
+          throw Exception('$numFormat does not work for ${value.runtimeType}');
         }
-        _buf.write('><v>');
-        final v = switch (numFormat) {
-          DateTimeNumFormat() => numFormat.writeDate(value),
-          _ => throw Exception(
-              '$numFormat does not work for ${value.runtimeType}'),
-        };
-        _buf.write(v);
-        _buf.write('</v></c>');
+        final v = numFormat.writeDate(value);
+        _buf.write('><v>$v</v></c>');
 
       case TimeCellValue():
-        if (styleIndex > 0) {
-          _buf.write(' s="');
-          _buf.write(styleIndex);
-          _buf.write('"');
+        if (styleIndex > 0) _buf.write(' s="$styleIndex"');
+        if (numFormat is! TimeNumFormat) {
+          throw Exception('$numFormat does not work for ${value.runtimeType}');
         }
-        _buf.write('><v>');
-        final v = switch (numFormat) {
-          TimeNumFormat() => numFormat.writeTime(value),
-          _ => throw Exception(
-              '$numFormat does not work for ${value.runtimeType}'),
-        };
-        _buf.write(v);
-        _buf.write('</v></c>');
+        final v = numFormat.writeTime(value);
+        _buf.write('><v>$v</v></c>');
     }
   }
 

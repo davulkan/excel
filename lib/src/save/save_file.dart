@@ -129,7 +129,7 @@ class Save {
         if (styleIndex >= 0) buf.write(' s="$styleIndex"');
 
         buf.write('><f>');
-        buf.write(_escapeXmlText(value.formula));
+        buf.write(escapeXmlText(value.formula));
         buf.write('</f><v></v></c>');
 
       case IntCellValue():
